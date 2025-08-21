@@ -2,23 +2,48 @@ import argparse
 import yaml
 
 def generar_compose(nombre_archivo, cantidad_clientes):
-    data = {
-        'version': '1',
-        'name': 'multiclient',
-        'services': {
-            f'cliente{i}': {
-                'container_name': f'cliente{i}',
-                'image': 'client:latest',
-                'entrypoint': '/client',
-                'environment': [
-                    'CLI_ID=1',
-                    'CLI_LOG_LEVEL=DEBUG'
-                ],
-                'networks': 'testing_net',
-                'depends_on': 'server',
-            }
-            for i in range(1, int(cantidad_clientes) + 1)
+    servicios_cliente = {
+        f'cliente{i}': {
+            'container_name': f'cliente{i}',
+            'image': 'client:latest',
+            'entrypoint': '/client',
+            'environment': [
+                'CLI_ID=1',
+                'CLI_LOG_LEVEL=DEBUG'
+            ],
+            'networks': ['testing_net'],
+            'depends_on': ['server'],
+        }
+        for i in range(1, int(cantidad_clientes) + 1)
+    }
+
+    services = {
+        'server': {
+            'container_name': 'server',
+            'image': 'server:latest',
+            'entrypoint': 'python3 /main.py',
+            'environment': [
+                'PYTHONUNBUFFERED=1',
+                'LOGGING_LEVEL=DEBUG'
+            ],
+            'networks': ['testing_net']
         },
+        **servicios_cliente,
+    }
+
+    data = {
+        'name': 'tp0',
+        'services': services,
+        'networks': {
+            'testing_net': {
+                'ipam': {
+                    'driver': 'default',
+                    'config': [
+                        {'subnet': '172.25.125.0/24'}
+                    ]
+                }
+            }
+        }
     }
     with open(nombre_archivo, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
