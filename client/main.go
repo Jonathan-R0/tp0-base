@@ -11,6 +11,9 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
+
+	"os/signal"
+	"syscall"
 )
 
 var log = logging.MustGetLogger("log")
@@ -100,6 +103,10 @@ func main() {
 		log.Criticalf("%s", err)
 	}
 
+	sigChannel := make(chan os.Signal, 1)
+	signal.Notify(sigChannel, syscall.SIGTERM)
+	signal.Notify(sigChannel, syscall.SIGINT)
+
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
@@ -111,5 +118,5 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
-	client.StartClientLoop()
+	client.StartClientLoop(sigChannel)
 }
