@@ -26,7 +26,7 @@ def generar_compose(nombre_archivo, cantidad_clientes):
 def main():
     parser = argparse.ArgumentParser(description="Generador Docker Compose")
     parser.add_argument("nombre", type=str, help="Nombre del Compose generado")
-    parser.add_argument("cantidad_clientes", type=str, help="Cantidad de clientes")
+    parser.add_argument("cantidad_clientes", type=int, help="Cantidad de clientes")
 
     args = parser.parse_args()
 
