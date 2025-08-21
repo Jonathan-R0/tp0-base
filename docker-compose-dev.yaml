@@ -8,7 +8,7 @@ services:
       - PYTHONUNBUFFERED=1
       - LOGGING_LEVEL=DEBUG
     volumes:
-      - ./server/config.ini:/config.ini:ro
+      - ./server/config.ini:/config.ini
     networks:
       - testing_net
 
@@ -20,7 +20,7 @@ services:
       - CLI_ID=1
       - CLI_LOG_LEVEL=DEBUG
     volumes:
-      - ./client/config.yaml:/config.yaml:ro
+      - ./client/config.yaml:/config.yaml
     networks:
       - testing_net
     depends_on:

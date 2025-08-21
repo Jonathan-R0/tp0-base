@@ -12,7 +12,7 @@ def generar_compose(nombre_archivo, cantidad_clientes):
                 'CLI_LOG_LEVEL=DEBUG'
             ],
             'volumes': [
-                'client/config.yaml:/config.yaml:ro'
+                './client/config.yaml:/config.yaml'
             ],
             'networks': ['testing_net'],
             'depends_on': ['server'],
@@ -30,7 +30,7 @@ def generar_compose(nombre_archivo, cantidad_clientes):
                 'LOGGING_LEVEL=DEBUG'
             ],
             'volumes': [
-                'server/config.ini:/config.ini:ro'
+                './server/config.ini:/config.ini'
             ],
             'networks': ['testing_net']
         },
