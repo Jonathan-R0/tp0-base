@@ -1,13 +1,41 @@
 import socket
 import logging
+import signal
 
 
 class Server:
-    def __init__(self, port, listen_backlog):
+    def __init__(self, port, listen_backlog, program_normal_exit):
+        self.shutdown_requested = False
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        self.program_normal_exit = program_normal_exit
+        self.client_sockets = []
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+
+    def _signal_handler(self, _signum, _frame):
+        self.shutdown_requested = True
+        self.shutdown()
+    
+    def should_shutdown(self):
+        return self.shutdown_requested
+    
+    def shutdown(self):
+        logging.info('action: shutdown | result: in_progress')
+        if self._server_socket: self._server_socket.close()
+        logging.info('action: shutdown | result: success')
+
+        logging.info('action: shutdown clients | result: in_progress')
+        for client_sock in self.client_sockets:
+            try:
+                client_sock.close()
+            except OSError as e:
+                logging.error(f'action: shutdown clients | result: fail')
+        logging.info('action: shutdown clients | result: success')
+
+        self.program_normal_exit()
 
     def run(self):
         """
@@ -20,9 +48,13 @@ class Server:
 
         # TODO: Modify this program to handle signal to graceful shutdown
         # the server
-        while True:
-            client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
+        while not self.should_shutdown():
+            try:
+                client_sock = self.__accept_new_connection()
+                self.__handle_client_connection(client_sock)
+            except:
+                if self.should_shutdown():
+                    break
 
     def __handle_client_connection(self, client_sock):
         """
@@ -31,6 +63,7 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
+        if client_sock: self.client_sockets.append(client_sock)
         try:
             # TODO: Modify the receive to avoid short-reads
             msg = client_sock.recv(1024).rstrip().decode('utf-8')
@@ -42,6 +75,7 @@ class Server:
             logging.error("action: receive_message | result: fail | error: {e}")
         finally:
             client_sock.close()
+            if client_sock: self.client_sockets.remove(client_sock)
 
     def __accept_new_connection(self):
         """

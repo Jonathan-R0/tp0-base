@@ -4,7 +4,10 @@ from configparser import ConfigParser
 from common.server import Server
 import logging
 import os
+import sys
 
+def program_normal_exit():
+    sys.exit(0)
 
 def initialize_config():
     """ Parse env variables or config file to find program config params
@@ -48,7 +51,7 @@ def main():
                   f"listen_backlog: {listen_backlog} | logging_level: {logging_level}")
 
     # Initialize server and start server loop
-    server = Server(port, listen_backlog)
+    server = Server(port, listen_backlog, program_normal_exit)
     server.run()
 
 def initialize_log(logging_level):
