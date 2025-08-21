@@ -3,8 +3,8 @@ import yaml
 
 def generar_compose(nombre_archivo, cantidad_clientes):
     servicios_cliente = {
-        f'cliente{i}': {
-            'container_name': f'cliente{i}',
+        f'client{i}': {
+            'container_name': f'client{i}',
             'image': 'client:latest',
             'entrypoint': '/client',
             'environment': [
