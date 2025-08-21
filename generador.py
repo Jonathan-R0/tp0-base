@@ -8,7 +8,7 @@ def generar_compose(nombre_archivo, cantidad_clientes):
             'image': 'client:latest',
             'entrypoint': '/client',
             'environment': [
-                'CLI_ID=1',
+                f'CLI_ID={i}',
                 'CLI_LOG_LEVEL=DEBUG'
             ],
             'volumes': [
