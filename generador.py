@@ -11,6 +11,9 @@ def generar_compose(nombre_archivo, cantidad_clientes):
                 'CLI_ID=1',
                 'CLI_LOG_LEVEL=DEBUG'
             ],
+            'volumes': [
+                'client/config.yaml:/config.yaml:ro'
+            ],
             'networks': ['testing_net'],
             'depends_on': ['server'],
         }
@@ -25,6 +28,9 @@ def generar_compose(nombre_archivo, cantidad_clientes):
             'environment': [
                 'PYTHONUNBUFFERED=1',
                 'LOGGING_LEVEL=DEBUG'
+            ],
+            'volumes': [
+                'server/config.ini:/config.ini:ro'
             ],
             'networks': ['testing_net']
         },
