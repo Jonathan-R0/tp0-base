@@ -93,7 +93,7 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 		)
 
 		select {
-		case <-time.Sleep(c.config.LoopPeriod):
+		case <-time.After(c.config.LoopPeriod):
 		case <-sigChannel:
 			log.Infof("action: shutdown | result: success")
 			return
