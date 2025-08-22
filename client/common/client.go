@@ -57,57 +57,58 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 	log.Infof("action: start_client_loop | result: in_progress | client_id: %v | total_bets: %d | max_batch_size: %d", 
 		c.config.ID, len(c.bets), c.config.MaxBatchAmount)
 	
-	// Create batches from all bets
 	batches := CreateBatches(c.bets, c.config.MaxBatchAmount)
 	log.Infof("action: batches_created | result: success | client_id: %v | total_batches: %d", 
 		c.config.ID, len(batches))
 	
-	for batchIndex, batch := range batches {
-		log.Debugf("action: process_batch | result: in_progress | client_id: %v | batch: %d/%d | bets_in_batch: %d", 
-			c.config.ID, batchIndex+1, len(batches), len(batch.Bets))
-		
-		select {
-		case <-sigChannel:
-			if c.conn != nil {
-				log.Debugf("action: close_connection_on_shutdown | result: in_progress | client_id: %v", c.config.ID)
-				_ = c.conn.Close()
-			}
-			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
+	for i, batch := range batches {
+		if c.CheckShutdown(sigChannel) {
 			return
-		default:
-			if err := c.createClientSocket(); err != nil {
-				log.Errorf("action: process_batch | result: fail | client_id: %v | batch: %d/%d | error: connection failed: %v", 
-					c.config.ID, batchIndex+1, len(batches), err)
-				return
-			}
-			
-			if err := batch.SendBatchToServer(c.conn); err != nil {
-				log.Errorf("action: process_batch | result: fail | client_id: %v | batch: %d/%d | error: send failed: %v", 
-					c.config.ID, batchIndex+1, len(batches), err)
-				c.conn.Close()
-				return
-			}
-			
-			if err := batch.ReceiveBatchResponse(c.conn); err != nil {
-				log.Errorf("action: process_batch | result: fail | client_id: %v | batch: %d/%d | error: receive failed: %v", 
-					c.config.ID, batchIndex+1, len(batches), err)
-				c.conn.Close()
-				return
-			}
-			
-			log.Debugf("action: close_connection | result: in_progress | client_id: %v | batch: %d/%d", c.config.ID, batchIndex+1, len(batches))
-			c.conn.Close()
-			
-			log.Debugf("action: process_batch | result: success | client_id: %v | batch: %d/%d | bets_processed: %d", 
-				c.config.ID, batchIndex+1, len(batches), len(batch.Bets))
 		}
 		
-		if batchIndex < len(batches)-1 {
-			log.Debugf("action: wait_between_batches | result: in_progress | client_id: %v | wait_time: %v", 
-				c.config.ID, c.config.LoopPeriod)
-			time.Sleep(c.config.LoopPeriod)
+		if err := c.ProcessBatch(batch, i+1, len(batches)); err != nil {
+			log.Errorf("action: process_batch | result: fail | client_id: %v | batch: %d/%d | error: %v", 
+				c.config.ID, i+1, len(batches), err)
+			return
 		}
+		
+		c.WaitBetweenBatches(i, len(batches))
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v | total_bets_processed: %d", c.config.ID, len(c.bets))
+}
+
+// CheckShutdown checks if shutdown was requested
+func (c *Client) CheckShutdown(sigChannel chan os.Signal) bool {
+	select {
+	case <-sigChannel:
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+		log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
+		return true
+	default:
+		return false
+	}
+}
+
+// ProcessBatch handles the complete processing of a single batch
+func (c *Client) ProcessBatch(batch *BetBatch, batchNum, totalBatches int) error {
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
+	defer c.conn.Close()
+	
+	if err := batch.SendBatchToServer(c.conn); err != nil {
+		return err
+	}
+	
+	return batch.ReceiveBatchResponse(c.conn)
+}
+
+// WaitBetweenBatches adds delay between batches if not the last one
+func (c *Client) WaitBetweenBatches(currentIndex, totalBatches int) {
+	if currentIndex < totalBatches-1 {
+		time.Sleep(c.config.LoopPeriod)
+	}
 }
