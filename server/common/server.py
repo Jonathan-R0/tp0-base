@@ -2,7 +2,7 @@ import socket
 import logging
 import signal
 
-from common.utils import ack_client, receive_bet, store_bets
+from common.utils import ack_batch_client, receive_bet_batch, store_bets
 
 
 class Server:
@@ -58,7 +58,7 @@ class Server:
 
     def __handle_client_connection(self, client_sock):
         """
-        Read message from a specific client socket and closes the socket
+        Read batch of bets from a specific client socket and closes the socket
 
         If a problem arises in the communication with the client, the
         client socket will also be closed
@@ -73,16 +73,14 @@ class Server:
         
         if client_sock: self.client_sockets.append(client_sock)
         try:
-            bet = receive_bet(client_sock)
-            logging.info(f'action: apuesta_almacenada | result: in_progress | client: {addr_str} | dni: {bet.document} | numero: {bet.number}')
-            store_bets([bet])
-            logging.info(f'action: apuesta_almacenada | result: success | client: {addr_str} | dni: {bet.document} | numero: {bet.number}')
-            ack_client(client_sock, bet)
-            logging.info(f'action: handle_client_connection | result: success | client: {addr_str} | dni: {bet.document} | numero: {bet.number}')
-        except (OSError, ValueError, ConnectionError) as e:
-            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
+            bets = receive_bet_batch(client_sock)
+            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
+            store_bets(bets)
+            ack_batch_client(client_sock, bets, True)
+            logging.info(f'action: handle_client_connection | result: success | client: {addr_str} | cantidad: {len(bets)}')
         except Exception as e:
-            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | unexpected_error: {e}')
+            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
+            ack_batch_client(client_sock, [], False)
         finally:
             try:
                 client_sock.close()

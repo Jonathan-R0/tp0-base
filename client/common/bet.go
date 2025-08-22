@@ -3,8 +3,10 @@ package common
 import (
 	"bufio"
 	"encoding/binary"
+	"encoding/csv"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -18,92 +20,176 @@ type Bet struct {
 	Number int
 }
 
+type BetBatch struct {
+	Bets []Bet
+}
+
+func NewBetBatch(bets []Bet) *BetBatch {
+	return &BetBatch{Bets: bets}
+}
+
+func ReadBetsFromCSV(filename string, agencyID string) ([]Bet, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open CSV file: %v", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CSV file: %v", err)
+	}
+
+	var bets []Bet
+	for i, record := range records {
+		if len(record) != 5 {
+			return nil, fmt.Errorf("invalid record at line %d: expected 5 fields, got %d", i+1, len(record))
+		}
+
+		document, err := strconv.Atoi(strings.TrimSpace(record[2]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid document at line %d: %v", i+1, err)
+		}
+
+		number, err := strconv.Atoi(strings.TrimSpace(record[4]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid number at line %d: %v", i+1, err)
+		}
+
+		bet := Bet{
+			Agency:   agencyID,
+			Name:     strings.TrimSpace(record[0]),
+			Lastname: strings.TrimSpace(record[1]),
+			Document: document,
+			Birthdate: strings.TrimSpace(record[3]),
+			Number:   number,
+		}
+		bets = append(bets, bet)
+	}
+
+	return bets, nil
+}
+
+func CreateBatches(bets []Bet, maxBatchSize int) []*BetBatch {
+	var batches []*BetBatch
+	
+	for i := 0; i < len(bets); i += maxBatchSize {
+		end := i + maxBatchSize
+		if end > len(bets) {
+			end = len(bets)
+		}
+		
+		batch := NewBetBatch(bets[i:end])
+		batches = append(batches, batch)
+	}
+	
+	return batches
+}
+
 func DoParseToNumber(s string) int {
 	number, _ := strconv.Atoi(strings.TrimSpace(s))
 	return number
 }
 
-func (b *Bet) ReceiveBytesAndAssertAllDataMatches(conn net.Conn) {
-	log.Infof("action: receive_response | result: in_progress | dni: %d | numero: %d", b.Document, b.Number)
+func (batch *BetBatch) SendBatchToServer(conn net.Conn) error {
+	log.Infof("action: send_batch | result: in_progress | bets_count: %d", len(batch.Bets))
 	
-	msg, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		log.Errorf("action: receive_response | result: fail | dni: %d | numero: %d | error: %v", b.Document, b.Number, err)
-		return
+	var batchMessage strings.Builder
+	batchMessage.WriteString(fmt.Sprintf("%d\n", len(batch.Bets)))
+	
+	for _, bet := range batch.Bets {
+		betMessage := fmt.Sprintf("%s|%s|%s|%d|%s|%d\n", 
+			bet.Agency, bet.Name, bet.Lastname, bet.Document, bet.Birthdate, bet.Number)
+		batchMessage.WriteString(betMessage)
 	}
 	
-	log.Debugf("action: receive_response | result: in_progress | dni: %d | numero: %d | message_size: %d bytes", 
-		b.Document, b.Number, len(msg))
-	
-	data := strings.Split(strings.TrimSpace(msg), "|")
-	if len(data) != 6 {
-		log.Errorf("action: receive_response | result: fail | dni: %d | numero: %d | error: expected 6 fields, got %d", 
-			b.Document, b.Number, len(data))
-		return
-	}
-
-	log.Debugf("action: receive_response | result: in_progress | dni: %d | numero: %d | parsed_fields: %v", 
-		b.Document, b.Number, data)
-
-	receivedDocumentInt := DoParseToNumber(data[3])
-	receivedNumberInt := DoParseToNumber(data[5])
-	if receivedDocumentInt != b.Document || receivedNumberInt != b.Number ||
-		data[0] != b.Agency || data[1] != b.Name || data[2] != b.Lastname || data[4] != b.Birthdate {
-		log.Errorf("action: apuesta_enviada | result: fail | dni: %d | numero: %d | error: response validation failed", 
-			b.Document, b.Number)
-	} else {
-		log.Infof("action: apuesta_enviada | result: success | dni: %d | numero: %d", b.Document, b.Number)
-	}
-}
-
-func (b *Bet) WriteAllBytes(conn net.Conn, data []byte) error {
-	log.Debugf("action: write_bytes | result: in_progress | dni: %d | numero: %d | total_bytes: %d", 
-		b.Document, b.Number, len(data))
-	
-	totalWritten := 0
-	for totalWritten < len(data) {
-		n, err := conn.Write(data[totalWritten:])
-		if err != nil {
-			log.Errorf("action: write_bytes | result: fail | dni: %v | numero: %v | error: %v", 
-				b.Document, b.Number, err)
-			return err
-		}
-		totalWritten += n
-		log.Debugf("action: write_bytes | result: in_progress | dni: %d | numero: %d | written: %d/%d bytes", 
-			b.Document, b.Number, totalWritten, len(data))
-	}
-	
-	log.Debugf("action: write_bytes | result: success | dni: %d | numero: %d | total_written: %d bytes", 
-		b.Document, b.Number, totalWritten)
-	return nil
-}
-
-func (b *Bet) SendBetToServer(conn net.Conn) error {
-	log.Infof("action: send_bet | result: in_progress | dni: %d | numero: %d", b.Document, b.Number)
-	
-	message := fmt.Sprintf("%s|%s|%s|%d|%s|%d\n", b.Agency, b.Name, b.Lastname, b.Document, b.Birthdate, b.Number)
-	log.Debugf("action: send_bet | result: in_progress | dni: %d | numero: %d | message_size: %d bytes", 
-		b.Document, b.Number, len(message))
+	message := batchMessage.String()
+	log.Debugf("action: send_batch | result: in_progress | bets_count: %d | message_size: %d bytes", 
+		len(batch.Bets), len(message))
 	
 	messageBytes := []byte(message)
 	sizeBuffer := make([]byte, 2)
 
 	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
-	log.Debugf("action: send_bet | result: in_progress | dni: %d | numero: %d | sending_size_header: %d bytes", 
-		b.Document, b.Number, len(messageBytes))
+	log.Debugf("action: send_batch | result: in_progress | bets_count: %d | sending_size_header: %d bytes", 
+		len(batch.Bets), len(messageBytes))
 
-	if err := b.WriteAllBytes(conn, sizeBuffer); err != nil {
-		log.Errorf("action: send_bet | result: fail | dni: %d | numero: %d | error: failed to send size header: %v", 
-			b.Document, b.Number, err)
+	if err := batch.WriteAllBytes(conn, sizeBuffer); err != nil {
+		log.Errorf("action: send_batch | result: fail | bets_count: %d | error: failed to send size header: %v", 
+			len(batch.Bets), err)
 		return err
 	}
 
-	if err := b.WriteAllBytes(conn, messageBytes); err != nil {
-		log.Errorf("action: send_bet | result: fail | dni: %d | numero: %d | error: failed to send message: %v", 
-			b.Document, b.Number, err)
+	if err := batch.WriteAllBytes(conn, messageBytes); err != nil {
+		log.Errorf("action: send_batch | result: fail | bets_count: %d | error: failed to send message: %v", 
+			len(batch.Bets), err)
 		return err
 	}
 
-	log.Infof("action: send_bet | result: success | dni: %d | numero: %d", b.Document, b.Number)
+	log.Infof("action: send_batch | result: success | bets_count: %d", len(batch.Bets))
+	return nil
+}
+
+func (batch *BetBatch) ReceiveBatchResponse(conn net.Conn) error {
+	log.Infof("action: receive_batch_response | result: in_progress | bets_count: %d", len(batch.Bets))
+	
+	msg, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		log.Errorf("action: receive_batch_response | result: fail | bets_count: %d | error: %v", len(batch.Bets), err)
+		return err
+	}
+	
+	log.Debugf("action: receive_batch_response | result: in_progress | bets_count: %d | message_size: %d bytes", 
+		len(batch.Bets), len(msg))
+	
+	data := strings.Split(strings.TrimSpace(msg), "|")
+	if len(data) != 2 {
+		log.Errorf("action: receive_batch_response | result: fail | bets_count: %d | error: expected 2 fields, got %d", 
+			len(batch.Bets), len(data))
+		return fmt.Errorf("invalid response format")
+	}
+
+	status := data[0]
+	quantityStr := data[1]
+	
+	quantity, err := strconv.Atoi(quantityStr)
+	if err != nil {
+		log.Errorf("action: receive_batch_response | result: fail | bets_count: %d | error: invalid quantity: %v", 
+			len(batch.Bets), err)
+		return err
+	}
+
+	if status == "SUCCESS" {
+		log.Infof("action: apuesta_enviada | result: success | bets_count: %d | processed: %d", 
+			len(batch.Bets), quantity)
+	} else {
+		log.Errorf("action: apuesta_enviada | result: fail | bets_count: %d | processed: %d", 
+			len(batch.Bets), quantity)
+		return fmt.Errorf("batch processing failed")
+	}
+	
+	return nil
+}
+
+func (batch *BetBatch) WriteAllBytes(conn net.Conn, data []byte) error {
+	log.Debugf("action: write_batch_bytes | result: in_progress | bets_count: %d | total_bytes: %d", 
+		len(batch.Bets), len(data))
+	
+	totalWritten := 0
+	for totalWritten < len(data) {
+		n, err := conn.Write(data[totalWritten:])
+		if err != nil {
+			log.Errorf("action: write_batch_bytes | result: fail | bets_count: %d | error: %v", 
+				len(batch.Bets), err)
+			return err
+		}
+		totalWritten += n
+		log.Debugf("action: write_batch_bytes | result: in_progress | bets_count: %d | written: %d/%d bytes", 
+			len(batch.Bets), totalWritten, len(data))
+	}
+	
+	log.Debugf("action: write_batch_bytes | result: success | bets_count: %d | total_written: %d bytes", 
+		len(batch.Bets), totalWritten)
 	return nil
 }

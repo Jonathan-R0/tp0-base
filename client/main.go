@@ -121,7 +121,7 @@ func PrintConfig(v *viper.Viper) {
 }
 
 func main() {
-	v, bet, err := InitConfig()
+	v, _, err := InitConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
 	}
@@ -137,6 +137,17 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
+	clientID := v.GetString("id")
+	csvFilename := fmt.Sprintf("/data/agency-%s.csv", clientID)
+	
+	bets, err := common.ReadBetsFromCSV(csvFilename, clientID)
+	if err != nil {
+		log.Criticalf("Failed to read CSV file: %v", err)
+	}
+
+	log.Infof("action: csv_loaded | result: success | client_id: %s | bets_count: %d | filename: %s", 
+		clientID, len(bets), csvFilename)
+
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
@@ -145,6 +156,6 @@ func main() {
 		MaxBatchAmount: v.GetInt("batch.maxAmount"),
 	}
 
-	client := common.NewClient(clientConfig, *bet)
+	client := common.NewClient(clientConfig, bets)
 	client.StartClientLoop(sigChannel)
 }

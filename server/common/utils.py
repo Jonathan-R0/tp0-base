@@ -1,7 +1,6 @@
 import csv
 import datetime
-import time
-
+import logging
 
 """ Bets storage location. """
 STORAGE_FILEPATH = "./bets.csv"
@@ -50,74 +49,106 @@ def load_bets() -> list[Bet]:
             yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
 
 """
-Receives a bet from a client socket.
+Receives a batch of bets from a client socket.
 """
-def receive_bet(client_sock) -> Bet:
-    import logging
-    
+def receive_bet_batch(client_sock) -> list[Bet]:
     try:
         client_addr = client_sock.getpeername()
         addr_str = f"{client_addr[0]}:{client_addr[1]}"
     except:
         addr_str = "unknown"
     
-    logging.info(f'action: receive_bet | result: in_progress | client: {addr_str}')
+    logging.info(f'action: receive_bet_batch | result: in_progress | client: {addr_str}')
     
+    # Read message size (2 bytes)
     size_bytes = client_sock.recv(2)
     if len(size_bytes) != 2:
-        logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Failed to read message size, got {len(size_bytes)} bytes')
+        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Failed to read message size, got {len(size_bytes)} bytes')
         raise ConnectionError("Failed to read message size")
     
     size = int.from_bytes(size_bytes, byteorder='big')
-    logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | message_size: {size} bytes')
+    logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | message_size: {size} bytes')
     
+    # Read the entire message
     data = b""
     while len(data) < size:
         remaining = size - len(data)
         packet = client_sock.recv(remaining)
         if not packet:
-            logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Connection closed before reading all data, got {len(data)}/{size} bytes')
+            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Connection closed before reading all data, got {len(data)}/{size} bytes')
             raise ConnectionError("Connection closed before reading all data")
         data += packet
-        logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | received: {len(data)}/{size} bytes')
+        logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | received: {len(data)}/{size} bytes')
     
-    bet_data = data.decode('utf-8').strip().split('|')
-    logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | fields_count: {len(bet_data)}')
+    # Parse the batch message
+    message = data.decode('utf-8').strip()
+    lines = message.split('\n')
     
-    if len(bet_data) != 6:
-        logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Invalid bet data format: expected 6 fields, got {len(bet_data)}')
-        raise ValueError(f"Invalid bet data format: expected 6 fields, got {len(bet_data)}")
+    if not lines:
+        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Empty batch message')
+        raise ValueError("Empty batch message")
     
-    logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | parsing_fields: agency="{bet_data[0]}" name="{bet_data[1]}" lastname="{bet_data[2]}" document="{bet_data[3]}" birthdate="{bet_data[4]}" number="{bet_data[5]}"')
-    
+    # First line should be the batch count
     try:
-        bet = Bet(*bet_data)
-        logging.info(f'action: receive_bet | result: success | client: {addr_str} | agency: {bet.agency} | dni: {bet.document} | number: {bet.number}')
-        return bet
-    except Exception as e:
-        logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Failed to create Bet object: {e}')
-        raise
- 
-"""
-Acknowledges a bet by echoing it back to the client.
-"""
-def ack_client(client_sock, bet) -> None:
-    import logging
+        batch_count = int(lines[0].strip())
+    except ValueError:
+        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Invalid batch count in first line: {lines[0]}')
+        raise ValueError(f"Invalid batch count: {lines[0]}")
     
+    logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | batch_count: {batch_count}')
+    
+    # Remaining lines are bet data
+    bet_lines = lines[1:]
+    
+    if len(bet_lines) != batch_count:
+        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Expected {batch_count} bet lines, got {len(bet_lines)}')
+        raise ValueError(f"Batch count mismatch: expected {batch_count} bets, got {len(bet_lines)}")
+    
+    logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | bet_lines_count: {len(bet_lines)}')
+
+    bets = []
+    for i, bet_line in enumerate(bet_lines):
+        if not bet_line.strip():
+            continue
+            
+        bet_data = bet_line.strip().split('|')
+        if len(bet_data) != 6:
+            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Invalid bet data at line {i+1}: expected 6 fields, got {len(bet_data)}')
+            raise ValueError(f"Invalid bet data format at line {i+1}: expected 6 fields, got {len(bet_data)}")
+        
+        logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | line {i+1}: agency="{bet_data[0]}" name="{bet_data[1]}" lastname="{bet_data[2]}" document="{bet_data[3]}" birthdate="{bet_data[4]}" number="{bet_data[5]}"')
+        
+        try:
+            bet = Bet(*bet_data)
+            bets.append(bet)
+        except Exception as e:
+            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Failed to create Bet object at line {i+1}: {e}')
+            raise
+    
+    logging.info(f'action: receive_bet_batch | result: success | client: {addr_str} | bets_count: {len(bets)}')
+    return bets
+
+"""
+Acknowledges a batch of bets by sending success/failure response to the client.
+"""
+def ack_batch_client(client_sock, bets: list[Bet], success: bool) -> None:
     try:
         client_addr = client_sock.getpeername()
         addr_str = f"{client_addr[0]}:{client_addr[1]}"
     except:
         addr_str = "unknown"
     
-    logging.info(f'action: ack_client | result: in_progress | client: {addr_str} | dni: {bet.document} | number: {bet.number}')
+    status = "SUCCESS" if success else "FAIL"
+    quantity = len(bets)
     
-    response = f"{bet.agency}|{bet.first_name}|{bet.last_name}|{bet.document}|{bet.birthdate}|{bet.number}\n"
-    logging.debug(f'action: ack_client | result: in_progress | client: {addr_str} | response_size: {len(response.encode("utf-8"))} bytes')
+    logging.info(f'action: ack_batch_client | result: in_progress | client: {addr_str} | status: {status} | bets_count: {quantity}')
+    
+    response = f"{status}|{quantity}\n"
+    logging.debug(f'action: ack_batch_client | result: in_progress | client: {addr_str} | response_size: {len(response.encode("utf-8"))} bytes')
     
     try:
         bytes_sent = client_sock.send(response.encode('utf-8'))
-        logging.debug(f'action: ack_client | result: in_progress | client: {addr_str} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
-        logging.info(f'action: ack_client | result: success | client: {addr_str} | dni: {bet.document} | number: {bet.number}')
+        logging.debug(f'action: ack_batch_client | result: in_progress | client: {addr_str} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
+        logging.info(f'action: ack_batch_client | result: success | client: {addr_str} | status: {status} | bets_count: {quantity}')
     except Exception as e:
-        logging.error(f'action: ack_client | result: fail | client: {addr_str} | dni: {bet.document} | number: {bet.number} | error: {e}')
+        logging.error(f'action: ack_batch_client | result: fail | client: {addr_str} | status: {status} | bets_count: {quantity} | error: {e}')
