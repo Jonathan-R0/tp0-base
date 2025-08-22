@@ -17,6 +17,11 @@ services:
     entrypoint: /client
     environment:
       - CLI_ID=1
+      - NOMBRE=Santiago Lionel
+      - APELLIDO=Lorca
+      - DOCUMENTO=30904465
+      - NACIMIENTO=1999-03-17
+      - NUMERO=7574
     volumes:
       - ./client/config.yaml:/config.yaml
     networks:

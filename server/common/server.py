@@ -2,7 +2,7 @@ import socket
 import logging
 import signal
 
-from server.common.utils import ack_client, receive_bet, store_bets
+from common.utils import ack_client, receive_bet, store_bets
 
 
 class Server:
