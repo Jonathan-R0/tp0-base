@@ -63,18 +63,34 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
+        try:
+            client_addr = client_sock.getpeername()
+            addr_str = f"{client_addr[0]}:{client_addr[1]}"
+        except:
+            addr_str = "unknown"
+        
+        logging.info(f'action: handle_client_connection | result: in_progress | client: {addr_str}')
+        
         if client_sock: self.client_sockets.append(client_sock)
         try:
             bet = receive_bet(client_sock)
-            logging.info(f'action: receive_bet | result: success | bet: {bet}')
+            logging.info(f'action: apuesta_almacenada | result: in_progress | client: {addr_str} | dni: {bet.document} | numero: {bet.number}')
             store_bets([bet])
-            logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
+            logging.info(f'action: apuesta_almacenada | result: success | client: {addr_str} | dni: {bet.document} | numero: {bet.number}')
             ack_client(client_sock, bet)
-        except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            logging.info(f'action: handle_client_connection | result: success | client: {addr_str} | dni: {bet.document} | numero: {bet.number}')
+        except (OSError, ValueError, ConnectionError) as e:
+            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
+        except Exception as e:
+            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | unexpected_error: {e}')
         finally:
-            client_sock.close()
-            if client_sock: self.client_sockets.remove(client_sock)
+            try:
+                client_sock.close()
+                logging.debug(f'action: close_client_connection | result: success | client: {addr_str}')
+            except:
+                logging.debug(f'action: close_client_connection | result: fail | client: {addr_str}')
+            if client_sock in self.client_sockets: 
+                self.client_sockets.remove(client_sock)
 
     def __accept_new_connection(self):
         """

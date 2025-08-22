@@ -53,30 +53,71 @@ def load_bets() -> list[Bet]:
 Receives a bet from a client socket.
 """
 def receive_bet(client_sock) -> Bet:
+    import logging
+    
+    try:
+        client_addr = client_sock.getpeername()
+        addr_str = f"{client_addr[0]}:{client_addr[1]}"
+    except:
+        addr_str = "unknown"
+    
+    logging.info(f'action: receive_bet | result: in_progress | client: {addr_str}')
+    
     size_bytes = client_sock.recv(2)
     if len(size_bytes) != 2:
+        logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Failed to read message size, got {len(size_bytes)} bytes')
         raise ConnectionError("Failed to read message size")
     
     size = int.from_bytes(size_bytes, byteorder='big')
+    logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | message_size: {size} bytes')
     
     data = b""
     while len(data) < size:
         remaining = size - len(data)
         packet = client_sock.recv(remaining)
         if not packet:
+            logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Connection closed before reading all data, got {len(data)}/{size} bytes')
             raise ConnectionError("Connection closed before reading all data")
         data += packet
+        logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | received: {len(data)}/{size} bytes')
     
     bet_data = data.decode('utf-8').strip().split('|')
+    logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | fields_count: {len(bet_data)}')
+    
     if len(bet_data) != 6:
+        logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Invalid bet data format: expected 6 fields, got {len(bet_data)}')
         raise ValueError(f"Invalid bet data format: expected 6 fields, got {len(bet_data)}")
     
-    bet = Bet(*bet_data)
-    return bet
+    logging.debug(f'action: receive_bet | result: in_progress | client: {addr_str} | parsing_fields: agency="{bet_data[0]}" name="{bet_data[1]}" lastname="{bet_data[2]}" document="{bet_data[3]}" birthdate="{bet_data[4]}" number="{bet_data[5]}"')
+    
+    try:
+        bet = Bet(*bet_data)
+        logging.info(f'action: receive_bet | result: success | client: {addr_str} | agency: {bet.agency} | dni: {bet.document} | number: {bet.number}')
+        return bet
+    except Exception as e:
+        logging.error(f'action: receive_bet | result: fail | client: {addr_str} | error: Failed to create Bet object: {e}')
+        raise
  
 """
 Acknowledges a bet by echoing it back to the client.
 """
 def ack_client(client_sock, bet) -> None:
+    import logging
+    
+    try:
+        client_addr = client_sock.getpeername()
+        addr_str = f"{client_addr[0]}:{client_addr[1]}"
+    except:
+        addr_str = "unknown"
+    
+    logging.info(f'action: ack_client | result: in_progress | client: {addr_str} | dni: {bet.document} | number: {bet.number}')
+    
     response = f"{bet.agency}|{bet.first_name}|{bet.last_name}|{bet.document}|{bet.birthdate}|{bet.number}\n"
-    client_sock.send(response.encode('utf-8'))
+    logging.debug(f'action: ack_client | result: in_progress | client: {addr_str} | response_size: {len(response.encode("utf-8"))} bytes')
+    
+    try:
+        bytes_sent = client_sock.send(response.encode('utf-8'))
+        logging.debug(f'action: ack_client | result: in_progress | client: {addr_str} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
+        logging.info(f'action: ack_client | result: success | client: {addr_str} | dni: {bet.document} | number: {bet.number}')
+    except Exception as e:
+        logging.error(f'action: ack_client | result: fail | client: {addr_str} | dni: {bet.document} | number: {bet.number} | error: {e}')

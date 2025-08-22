@@ -53,24 +53,51 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
+	log.Infof("action: start_client_loop | result: in_progress | client_id: %v | loop_amount: %d | loop_period: %v", 
+		c.config.ID, c.config.LoopAmount, c.config.LoopPeriod)
+	
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+		log.Debugf("action: client_iteration | result: in_progress | client_id: %v | iteration: %d/%d", 
+			c.config.ID, msgID, c.config.LoopAmount)
+		
 		// Create the connection the server in every loop iteration. Send an
 		select {
 		case <-sigChannel:
 			if c.conn != nil {
+				log.Debugf("action: close_connection_on_shutdown | result: in_progress | client_id: %v", c.config.ID)
 				_ = c.conn.Close()
 			}
-			log.Infof("action: shutdown | result: success")
+			log.Infof("action: shutdown | result: success | client_id: %v", c.config.ID)
 			return
 		default:
-			c.createClientSocket()
-			if c.bet.SendBetToServer(c.conn) != nil {
+			if err := c.createClientSocket(); err != nil {
+				log.Errorf("action: client_iteration | result: fail | client_id: %v | iteration: %d | error: connection failed: %v", 
+					c.config.ID, msgID, err)
 				return
 			}
+			
+			if err := c.bet.SendBetToServer(c.conn); err != nil {
+				log.Errorf("action: client_iteration | result: fail | client_id: %v | iteration: %d | error: send failed: %v", 
+					c.config.ID, msgID, err)
+				c.conn.Close()
+				return
+			}
+			
 			c.bet.ReceiveBytesAndAssertAllDataMatches(c.conn)
+			
+			log.Debugf("action: close_connection | result: in_progress | client_id: %v | iteration: %d", c.config.ID, msgID)
 			c.conn.Close()
+			
+			log.Debugf("action: client_iteration | result: success | client_id: %v | iteration: %d/%d", 
+				c.config.ID, msgID, c.config.LoopAmount)
+		}
+		
+		if msgID < c.config.LoopAmount {
+			log.Debugf("action: wait_between_iterations | result: in_progress | client_id: %v | wait_time: %v", 
+				c.config.ID, c.config.LoopPeriod)
+			time.Sleep(c.config.LoopPeriod)
 		}
 	}
 
