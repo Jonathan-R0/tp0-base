@@ -16,7 +16,8 @@ def generar_compose(nombre_archivo, cantidad_clientes):
                 f'NACIMIENTO=200{i % 10}-01-01',
             ],
             'volumes': [
-                './client/config.yaml:/config.yaml'
+                './client/config.yaml:/config.yaml',
+                f'./data/agency-{i}.csv:/agency.csv',
             ],
             'networks': ['testing_net'],
             'depends_on': ['server'],
