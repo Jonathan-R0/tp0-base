@@ -1,8 +1,6 @@
 package common
 
 import (
-	"bufio"
-	"fmt"
 	"net"
 	"os"
 	"time"
@@ -24,13 +22,15 @@ type ClientConfig struct {
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
+	bet Bet
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig) *Client {
+func NewClient(config ClientConfig, bet Bet) *Client {
 	client := &Client{
 		config: config,
+		bet: bet,
 	}
 	return client
 }
@@ -65,38 +65,12 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 			log.Infof("action: shutdown | result: success")
 			return
 		default:
-		}
-
-		c.createClientSocket()
-
-		// TODO: Modify the send to avoid short-write
-		fmt.Fprintf(
-			c.conn,
-			"[CLIENT %v] Message N°%v\n",
-			c.config.ID,
-			msgID,
-		)
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
-		c.conn.Close()
-
-		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
-			return
-		}
-
-		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-			c.config.ID,
-			msg,
-		)
-
-		select {
-		case <-time.After(c.config.LoopPeriod):
-		case <-sigChannel:
-			log.Infof("action: shutdown | result: success")
-			return
+			c.createClientSocket()
+			if c.bet.SendBetToServer(c.conn) != nil {
+				return
+			}
+			c.bet.ReceiveBytesAndAssertAllDataMatches(c.conn)
+			c.conn.Close()
 		}
 	}
 

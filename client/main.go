@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,14 @@ import (
 	"syscall"
 )
 
+func parseStringToIntOrThrowError(value string) (int, error) {
+	parsedValue, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, errors.Wrapf(err, "Could not parse value '%s' as int", value)
+	}
+	return parsedValue, nil
+}
+
 var log = logging.MustGetLogger("log")
 
 // InitConfig Function that uses viper library to parse configuration parameters.
@@ -23,7 +32,7 @@ var log = logging.MustGetLogger("log")
 // config file ./config.yaml. Environment variables takes precedence over parameters
 // defined in the configuration file. If some of the variables cannot be parsed,
 // an error is returned
-func InitConfig() (*viper.Viper, error) {
+func InitConfig() (*viper.Viper, *common.Bet, error) {
 	v := viper.New()
 
 	// Configure viper to read env variables with the CLI_ prefix
@@ -53,10 +62,26 @@ func InitConfig() (*viper.Viper, error) {
 	// Parse time.Duration variables and return an error if those variables cannot be parsed
 
 	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
-		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
+		return nil, nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
 	}
 
-	return v, nil
+	document, errorDocument := parseStringToIntOrThrowError(os.Getenv("DOCUMENTO"))
+	number, errorNumber := parseStringToIntOrThrowError(os.Getenv("NUMERO"))
+
+	if errorDocument != nil || errorNumber != nil {
+		return nil, nil, errors.New("Environment variables DOCUMENTO and NUMERO must be set and must be integers")
+	}
+
+	bet := &common.Bet{
+		Agency : v.GetString("id"),
+		Name : os.Getenv("NOMBRE"),
+		Lastname : os.Getenv("APELLIDO"),
+		Document : document,
+		Birthdate : os.Getenv("NACIMIENTO"),
+		Number : number,
+	}
+
+	return v, bet, nil
 }
 
 // InitLogger Receives the log level to be set in go-logging as a string. This method
@@ -94,7 +119,7 @@ func PrintConfig(v *viper.Viper) {
 }
 
 func main() {
-	v, err := InitConfig()
+	v, bet, err := InitConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
 	}
@@ -117,6 +142,6 @@ func main() {
 		LoopPeriod:    v.GetDuration("loop.period"),
 	}
 
-	client := common.NewClient(clientConfig)
+	client := common.NewClient(clientConfig, *bet)
 	client.StartClientLoop(sigChannel)
 }

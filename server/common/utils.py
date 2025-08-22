@@ -49,3 +49,34 @@ def load_bets() -> list[Bet]:
         for row in reader:
             yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
 
+"""
+Receives a bet from a client socket.
+"""
+def receive_bet(client_sock) -> Bet:
+    size_bytes = client_sock.recv(2)
+    if len(size_bytes) != 2:
+        raise ConnectionError("Failed to read message size")
+    
+    size = int.from_bytes(size_bytes, byteorder='big')
+    
+    data = b""
+    while len(data) < size:
+        remaining = size - len(data)
+        packet = client_sock.recv(remaining)
+        if not packet:
+            raise ConnectionError("Connection closed before reading all data")
+        data += packet
+    
+    bet_data = data.decode('utf-8').strip().split('|')
+    if len(bet_data) != 6:
+        raise ValueError(f"Invalid bet data format: expected 6 fields, got {len(bet_data)}")
+    
+    bet = Bet(*bet_data)
+    return bet
+ 
+"""
+Acknowledges a bet by echoing it back to the client.
+"""
+def ack_client(client_sock, bet) -> None:
+    response = f"{bet.agency}|{bet.first_name}|{bet.last_name}|{bet.document}|{bet.birthdate}|{bet.number}\n"
+    client_sock.send(response.encode('utf-8'))
