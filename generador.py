@@ -13,7 +13,7 @@ def generar_compose(nombre_archivo, cantidad_clientes):
                 f'NUMERO={1000 + i}',
                 f'NOMBRE=Nombre{i}',
                 f'APELLIDO=Apellido{i}',
-                f'NACIMIENTO=2000{i % 10}-01-01',
+                f'NACIMIENTO=200{i % 10}-01-01',
             ],
             'volumes': [
                 './client/config.yaml:/config.yaml'
