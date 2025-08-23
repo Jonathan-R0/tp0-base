@@ -195,7 +195,11 @@ func (c *Client) QueryWinners() error {
 	if strings.HasPrefix(response, "WINNERS|") {
 		parts := strings.Split(response, "|")
 		if len(parts) >= 2 {
-			winnersCount := len(parts) - 1 // Subtract 1 for "WINNERS" prefix
+			if len(parts) == 2 && parts[1] == "" {
+				log.Infof("action: consulta_ganadores | result: success | cant_ganadores: 0")
+				return nil
+			}
+			winnersCount := len(parts) - 1
 			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnersCount)
 			return nil
 		}
