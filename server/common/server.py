@@ -3,8 +3,7 @@ import logging
 import signal
 import threading
 
-from common.utils import ack_batch_client, receive_bet_batch_from_message, store_bets, handle_finished_notification, handle_winners_query
-
+from common.utils import ack_batch_client, receive_bet_batch_from_message, send_all_bytes, store_bets, handle_finished_notification, handle_winners_query
 
 class Server:
     def __init__(self, port, listen_backlog, expected_agencies, program_normal_exit):
@@ -198,9 +197,9 @@ class Server:
             # Send error response for non-batch messages
             try:
                 response = f"ERROR|{str(e)}\n"
-                client_sock.send(response.encode('utf-8'))
-            except:
-                pass
+                send_all_bytes(client_sock, response)
+            except Exception as send_error:
+                logging.error(f'action: send_error_response | result: fail | client: {addr_str} | error: {send_error}')
 
     def __handle_winners_query(self, client_sock, message, addr_str):
         """Handle a winners query from a client."""
@@ -209,9 +208,9 @@ class Server:
                 # Send error response for non-batch messages
                 try:
                     response = f"ERROR|Lottery not yet completed\n"
-                    client_sock.send(response.encode('utf-8'))
-                except:
-                    pass
+                    send_all_bytes(client_sock, response)
+                except Exception as send_error:
+                    logging.error(f'action: send_error_response | result: fail | client: {addr_str} | error: {send_error}')
                 return
                 
             agency_id = handle_winners_query(client_sock, message)
@@ -222,9 +221,9 @@ class Server:
             # Send error response for non-batch messages
             try:
                 response = f"ERROR|{str(e)}\n"
-                client_sock.send(response.encode('utf-8'))
-            except:
-                pass
+                send_all_bytes(client_sock, response)
+            except Exception as send_error:
+                logging.error(f'action: send_error_response | result: fail | client: {addr_str} | error: {send_error}')
 
 
 
