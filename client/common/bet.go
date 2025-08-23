@@ -2,7 +2,6 @@ package common
 
 import (
 	"bufio"
-	"encoding/binary"
 	"encoding/csv"
 	"fmt"
 	"net"
@@ -108,21 +107,8 @@ func (batch *BetBatch) SendBatchToServer(conn net.Conn) error {
 	log.Debugf("action: send_batch | result: in_progress | bets_count: %d | message_size: %d bytes", 
 		len(batch.Bets), len(message))
 	
-	messageBytes := []byte(message)
-	sizeBuffer := make([]byte, 2)
-
-	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
-	log.Debugf("action: send_batch | result: in_progress | bets_count: %d | sending_size_header: %d bytes", 
-		len(batch.Bets), len(messageBytes))
-
-	if err := WriteAllBytes(conn, sizeBuffer); err != nil {
-		log.Errorf("action: send_batch | result: fail | bets_count: %d | error: failed to send size header: %v", 
-			len(batch.Bets), err)
-		return err
-	}
-
-	if err := WriteAllBytes(conn, messageBytes); err != nil {
-		log.Errorf("action: send_batch | result: fail | bets_count: %d | error: failed to send message: %v", 
+	if err := SendMessageWithHeader(conn, message); err != nil {
+		log.Errorf("action: send_batch | result: fail | bets_count: %d | error: %v", 
 			len(batch.Bets), err)
 		return err
 	}

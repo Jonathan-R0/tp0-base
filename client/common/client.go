@@ -135,17 +135,8 @@ func (c *Client) NotifyFinished() error {
 	defer c.conn.Close()
 	
 	message := fmt.Sprintf("FINISHED|%s\n", c.config.ID)
-	messageBytes := []byte(message)
 	
-	// Send size header
-	sizeBuffer := make([]byte, 2)
-	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
-	
-	if err := WriteAllBytes(c.conn, sizeBuffer); err != nil {
-		return fmt.Errorf("failed to send size header: %v", err)
-	}
-	
-	if err := WriteAllBytes(c.conn, messageBytes); err != nil {
+	if err := SendMessageWithHeader(c.conn, message); err != nil {
 		return fmt.Errorf("failed to send finished message: %v", err)
 	}
 	
@@ -171,18 +162,9 @@ func (c *Client) QueryWinners() error {
 	defer c.conn.Close()
 	
 	message := fmt.Sprintf("QUERY_WINNERS|%s\n", c.config.ID)
-	messageBytes := []byte(message)
 	
-	// Send size header
-	sizeBuffer := make([]byte, 2)
-	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
-	
-	if err := WriteAllBytes(c.conn, sizeBuffer); err != nil {
-		return fmt.Errorf("failed to send size header: %v", err)
-	}
-	
-	if err := WriteAllBytes(c.conn, messageBytes); err != nil {
-		return fmt.Errorf("failed to send winners query: %v", err)
+	if err := SendMessageWithHeader(c.conn, message); err != nil {
+		return err
 	}
 	
 	// Read winners response
@@ -237,6 +219,24 @@ func (c *Client) QueryWinnersWithRetry() error {
 		}
 		
 		return err
+	}
+	
+	return nil
+}
+
+// SendMessageWithHeader sends a message with a 2-byte size header
+func SendMessageWithHeader(conn net.Conn, message string) error {
+	messageBytes := []byte(message)
+	
+	sizeBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
+	
+	if err := WriteAllBytes(conn, sizeBuffer); err != nil {
+		return fmt.Errorf("failed to send size header: %v", err)
+	}
+	
+	if err := WriteAllBytes(conn, messageBytes); err != nil {
+		return fmt.Errorf("failed to send message: %v", err)
 	}
 	
 	return nil
