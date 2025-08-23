@@ -218,23 +218,24 @@ func (c *Client) QueryWinnersWithRetry() error {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err := c.QueryWinners()
 		if err == nil {
-			return nil // Success
+			return nil
 		}
 		
-		// Check if the error is about lottery not being completed
 		if strings.Contains(err.Error(), "Lottery not yet completed") {
 			log.Infof("action: query_winners | result: in_progress | client_id: %v | attempt: %d | status: waiting_for_lottery_completion", c.config.ID, attempt)
 			if attempt < maxRetries {
 				time.Sleep(retryDelay)
 				continue
+			} else {
+				log.Infof("action: query_winners | result: timeout | client_id: %v | max_attempts: %d | reason: lottery_completion_timeout", c.config.ID, maxRetries)
+				return nil
 			}
 		}
 		
-		// For any other error or max retries reached, return the error
 		return err
 	}
 	
-	return fmt.Errorf("max_retries_reached: failed to query winners after %d attempts", maxRetries)
+	return nil
 }
 
 // WriteAllBytes writes all bytes to the connection, handling partial writes
