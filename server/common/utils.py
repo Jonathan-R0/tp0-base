@@ -80,7 +80,7 @@ def handle_finished_notification(client_sock, message: str) -> str:
     # Send acknowledgment
     response = "ACK\n"
     try:
-        bytes_sent = client_sock.send(response.encode('utf-8'))
+        bytes_sent = send_all_bytes(client_sock, response)
         logging.debug(f'action: handle_finished_notification | result: in_progress | client: {addr_str} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
         logging.info(f'action: handle_finished_notification | result: success | client: {addr_str} | agency: {agency_id}')
         return agency_id
@@ -115,7 +115,7 @@ def handle_winners_query(client_sock, message: str) -> str:
     response = f"WINNERS|{'|'.join(map(str, winners))}\n" if winners else "WINNERS|\n"
     
     try:
-        bytes_sent = client_sock.send(response.encode('utf-8'))
+        bytes_sent = send_all_bytes(client_sock, response)
         logging.debug(f'action: handle_winners_query | result: in_progress | client: {addr_str} | agency: {agency_id} | winners_count: {len(winners)} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
         logging.info(f'action: handle_winners_query | result: success | client: {addr_str} | agency: {agency_id} | winners_count: {len(winners)}')
         return agency_id
@@ -186,8 +186,26 @@ def ack_batch_client(client_sock, bets: list[Bet], success: bool) -> None:
     logging.debug(f'action: ack_batch_client | result: in_progress | client: {addr_str} | response_size: {len(response.encode("utf-8"))} bytes')
     
     try:
-        bytes_sent = client_sock.send(response.encode('utf-8'))
+        bytes_sent = send_all_bytes(client_sock, response)
         logging.debug(f'action: ack_batch_client | result: in_progress | client: {addr_str} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
         logging.info(f'action: ack_batch_client | result: success | client: {addr_str} | status: {status} | bets_count: {quantity}')
     except Exception as e:
         logging.error(f'action: ack_batch_client | result: fail | client: {addr_str} | status: {status} | bets_count: {quantity} | error: {e}')
+
+def send_all_bytes(sock, data):
+    """
+    Send all bytes through the socket, handling short sends.
+    """
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    
+    total_sent = 0
+    while total_sent < len(data):
+        try:
+            sent = sock.send(data[total_sent:])
+            if sent == 0:
+                raise ConnectionError("Socket connection broke")
+            total_sent += sent
+        except Exception as e:
+            raise ConnectionError(f"Failed to send data: {e}")
+    return total_sent

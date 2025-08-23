@@ -3,7 +3,7 @@ import logging
 import signal
 import threading
 
-from common.utils import ack_batch_client, receive_bet_batch_from_message, store_bets, handle_finished_notification, handle_winners_query
+from common.utils import ack_batch_client, receive_bet_batch_from_message, send_all_bytes, store_bets, handle_finished_notification, handle_winners_query
 
 
 class Server:
@@ -161,7 +161,7 @@ class Server:
             # Send error response for non-batch messages
             try:
                 response = f"ERROR|{str(e)}\n"
-                client_sock.send(response.encode('utf-8'))
+                send_all_bytes(client_sock, response)
             except:
                 pass
 
@@ -172,7 +172,7 @@ class Server:
                 # Send error response for non-batch messages
                 try:
                     response = f"ERROR|Lottery not yet completed\n"
-                    client_sock.send(response.encode('utf-8'))
+                    send_all_bytes(client_sock, response)
                 except:
                     pass
                 return
@@ -185,7 +185,7 @@ class Server:
             # Send error response for non-batch messages
             try:
                 response = f"ERROR|{str(e)}\n"
-                client_sock.send(response.encode('utf-8'))
+                send_all_bytes(client_sock, response)
             except:
                 pass
 
