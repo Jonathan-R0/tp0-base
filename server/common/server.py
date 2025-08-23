@@ -7,7 +7,7 @@ from common.utils import ack_batch_client, receive_bet_batch_from_message, store
 
 
 class Server:
-    def __init__(self, port, listen_backlog, program_normal_exit):
+    def __init__(self, port, listen_backlog, expected_agencies, program_normal_exit):
         self.shutdown_requested = False
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -18,6 +18,7 @@ class Server:
         self.finished_agencies = set()
         self.lottery_completed = False
         self.lottery_lock = threading.Lock()
+        self.expected_agencies = expected_agencies
         
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -150,8 +151,8 @@ class Server:
                 self.finished_agencies.add(agency_id)
                 logging.info(f'action: agency_finished | result: success | agency: {agency_id} | finished_count: {len(self.finished_agencies)}')
                 
-                # Check if all 5 agencies have finished
-                if len(self.finished_agencies) == 5 and not self.lottery_completed:
+                # Check if all expected agencies have finished
+                if len(self.finished_agencies) == self.expected_agencies and not self.lottery_completed:
                     self.lottery_completed = True
                     logging.info('action: sorteo | result: success')
                     

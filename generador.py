@@ -32,6 +32,7 @@ def generar_compose(nombre_archivo, cantidad_clientes):
             'entrypoint': 'python3 /main.py',
             'environment': [
                 'PYTHONUNBUFFERED=1',
+                f'CLIENTS={cantidad_clientes}',
             ],
             'volumes': [
                 './server/config.ini:/config.ini'
