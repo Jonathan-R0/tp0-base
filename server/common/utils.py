@@ -110,19 +110,9 @@ def handle_winners_query(client_sock, message: str) -> str:
     logging.debug(f'action: handle_winners_query | result: in_progress | client: {addr_str} | agency: {agency_id}')
     
     # Load all bets and find winners for this agency
-    all_bets = list(load_bets())
-    agency_bets = [bet for bet in all_bets if str(bet.agency) == agency_id]
-    
-    winners = []
-    for bet in agency_bets:
-        if has_won(bet):
-            winners.append(bet.document)
-    
-    # Send winners response
-    if winners:
-        response = f"WINNERS|{'|'.join(map(str, winners))}\n"
-    else:
-        response = "WINNERS|\n"  # No winners
+    agency_bets = [bet for bet in load_bets() if str(bet.agency) == agency_id]
+    winners = [bet.document for bet in agency_bets if has_won(bet)]
+    response = f"WINNERS|{'|'.join(map(str, winners))}\n" if winners else "WINNERS|\n"
     
     try:
         bytes_sent = client_sock.send(response.encode('utf-8'))
