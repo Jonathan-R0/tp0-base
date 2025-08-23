@@ -86,7 +86,7 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 		return
 	}
 	
-	if err := c.QueryWinners(); err != nil {
+	if err := c.QueryWinnersWithRetry(); err != nil {
 		log.Errorf("action: query_winners | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		return
 	}
@@ -208,6 +208,33 @@ func (c *Client) QueryWinners() error {
 	}
 	
 	return fmt.Errorf("unexpected_format: %s", response)
+}
+
+// QueryWinnersWithRetry queries the winners with retry logic for when lottery is not yet completed
+func (c *Client) QueryWinnersWithRetry() error {
+	maxRetries := 10
+	retryDelay := 500 * time.Millisecond
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err := c.QueryWinners()
+		if err == nil {
+			return nil // Success
+		}
+		
+		// Check if the error is about lottery not being completed
+		if strings.Contains(err.Error(), "Lottery not yet completed") {
+			log.Infof("action: query_winners | result: in_progress | client_id: %v | attempt: %d | waiting_for_lottery_completion", c.config.ID, attempt)
+			if attempt < maxRetries {
+				time.Sleep(retryDelay)
+				continue
+			}
+		}
+		
+		// For any other error or max retries reached, return the error
+		return err
+	}
+	
+	return fmt.Errorf("max_retries_reached: failed to query winners after %d attempts", maxRetries)
 }
 
 // WriteAllBytes writes all bytes to the connection, handling partial writes
