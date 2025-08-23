@@ -52,60 +52,69 @@ def load_bets() -> list[Bet]:
 Receives a batch of bets from a client socket.
 """
 def receive_bet_batch(client_sock) -> list[Bet]:
-    try:
-        client_addr = client_sock.getpeername()
-        addr_str = f"{client_addr[0]}:{client_addr[1]}"
-    except:
-        addr_str = "unknown"
-    
+    addr_str = _get_client_address(client_sock)
     logging.info(f'action: receive_bet_batch | result: in_progress | client: {addr_str}')
     
-    # Read message size (2 bytes)
+    message = _read_full_message(client_sock, addr_str)
+    bet_lines = _parse_batch_message(message, addr_str)
+    
+    bets = _process_bet_lines(bet_lines, addr_str)
+    
+    logging.info(f'action: receive_bet_batch | result: success | client: {addr_str} | bets_count: {len(bets)}')
+    return bets
+
+def _get_client_address(client_sock) -> str:
+    """Get client address string for logging."""
+    try:
+        client_addr = client_sock.getpeername()
+        return f"{client_addr[0]}:{client_addr[1]}"
+    except:
+        return "unknown"
+
+def _read_full_message(client_sock, addr_str: str) -> str:
+    """Read the complete message from client socket."""
     size_bytes = client_sock.recv(2)
     if len(size_bytes) != 2:
-        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Failed to read message size, got {len(size_bytes)} bytes')
+        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Failed to read message size')
         raise ConnectionError("Failed to read message size")
     
     size = int.from_bytes(size_bytes, byteorder='big')
     logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | message_size: {size} bytes')
     
-    # Read the entire message
     data = b""
     while len(data) < size:
         remaining = size - len(data)
         packet = client_sock.recv(remaining)
         if not packet:
-            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Connection closed before reading all data, got {len(data)}/{size} bytes')
+            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Connection closed unexpectedly')
             raise ConnectionError("Connection closed before reading all data")
         data += packet
-        logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | received: {len(data)}/{size} bytes')
     
-    # Parse the batch message
-    message = data.decode('utf-8').strip()
+    return data.decode('utf-8').strip()
+
+def _parse_batch_message(message: str, addr_str: str) -> list[str]:
+    """Parse batch message and return batch count and bet lines."""
     lines = message.split('\n')
-    
     if not lines:
         logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Empty batch message')
         raise ValueError("Empty batch message")
     
-    # First line should be the batch count
     try:
         batch_count = int(lines[0].strip())
     except ValueError:
-        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Invalid batch count in first line: {lines[0]}')
+        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Invalid batch count: {lines[0]}')
         raise ValueError(f"Invalid batch count: {lines[0]}")
     
-    logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | batch_count: {batch_count}')
-    
-    # Remaining lines are bet data
     bet_lines = lines[1:]
-    
     if len(bet_lines) != batch_count:
-        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Expected {batch_count} bet lines, got {len(bet_lines)}')
+        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Expected {batch_count} bets, got {len(bet_lines)}')
         raise ValueError(f"Batch count mismatch: expected {batch_count} bets, got {len(bet_lines)}")
     
-    logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | bet_lines_count: {len(bet_lines)}')
+    logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | batch_count: {batch_count}')
+    return bet_lines
 
+def _process_bet_lines(bet_lines: list[str], addr_str: str) -> list[Bet]:
+    """Process bet lines and create Bet objects."""
     bets = []
     for i, bet_line in enumerate(bet_lines):
         if not bet_line.strip():
@@ -113,7 +122,7 @@ def receive_bet_batch(client_sock) -> list[Bet]:
             
         bet_data = bet_line.strip().split('|')
         if len(bet_data) != 6:
-            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Invalid bet data at line {i+1}: expected 6 fields, got {len(bet_data)}')
+            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Invalid bet data at line {i+1}')
             raise ValueError(f"Invalid bet data format at line {i+1}: expected 6 fields, got {len(bet_data)}")
         
         logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | line {i+1}: agency="{bet_data[0]}" name="{bet_data[1]}" lastname="{bet_data[2]}" document="{bet_data[3]}" birthdate="{bet_data[4]}" number="{bet_data[5]}"')
@@ -125,7 +134,6 @@ def receive_bet_batch(client_sock) -> list[Bet]:
             logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Failed to create Bet object at line {i+1}: {e}')
             raise
     
-    logging.info(f'action: receive_bet_batch | result: success | client: {addr_str} | bets_count: {len(bets)}')
     return bets
 
 """
