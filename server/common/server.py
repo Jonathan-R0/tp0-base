@@ -13,6 +13,7 @@ class Server:
         signal.signal(signal.SIGINT, self._signal_handler)
         self.program_normal_exit = program_normal_exit
         self.client_sockets = []
+        self.client_threads = []
         
         # Lottery variables
         self.finished_agencies = set()
@@ -45,6 +46,11 @@ class Server:
                 logging.error(f'action: shutdown clients | result: fail')
         logging.info('action: shutdown clients | result: success')
 
+        logging.info('action: wait client threads | result: in_progress')
+        for t in self.client_threads:
+            t.join()
+        logging.info('action: wait client threads | result: success')
+
         self.program_normal_exit()
 
     def run(self):
@@ -57,7 +63,7 @@ class Server:
         while not self.should_shutdown():
             try:
                 client_sock = self.__accept_new_connection()
-                self.__handle_client_connection(client_sock)
+                self.client_threads.append(threading.Thread(target=self.__handle_client_connection, args=(client_sock,)))
             except:
                 if self.should_shutdown():
                     break
