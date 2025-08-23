@@ -223,7 +223,7 @@ func (c *Client) QueryWinnersWithRetry() error {
 		
 		// Check if the error is about lottery not being completed
 		if strings.Contains(err.Error(), "Lottery not yet completed") {
-			log.Infof("action: query_winners | result: in_progress | client_id: %v | attempt: %d | waiting_for_lottery_completion", c.config.ID, attempt)
+			log.Infof("action: query_winners | result: in_progress | client_id: %v | attempt: %d | status: waiting_for_lottery_completion", c.config.ID, attempt)
 			if attempt < maxRetries {
 				time.Sleep(retryDelay)
 				continue
