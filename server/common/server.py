@@ -14,6 +14,7 @@ class Server:
         self.program_normal_exit = program_normal_exit
         self.client_sockets = []
         self.client_threads = []
+        self.threads_lock = threading.Lock()
         
         # Lottery variables
         self.finished_agencies = set()
@@ -23,6 +24,7 @@ class Server:
         
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
 
@@ -39,16 +41,25 @@ class Server:
         logging.info('action: shutdown | result: success')
 
         logging.info('action: shutdown clients | result: in_progress')
-        for client_sock in self.client_sockets:
+        with self.threads_lock:
+            client_sockets_copy = self.client_sockets.copy()
+        
+        for client_sock in client_sockets_copy:
             try:
                 client_sock.close()
             except OSError as e:
-                logging.error(f'action: shutdown clients | result: fail')
+                logging.error(f'action: shutdown clients | result: fail | error: {e}')
         logging.info('action: shutdown clients | result: success')
 
         logging.info('action: wait client threads | result: in_progress')
-        for t in self.client_threads:
-            t.join()
+        with self.threads_lock:
+            threads_copy = self.client_threads.copy()
+        
+        for t in threads_copy:
+            if t.is_alive():
+                t.join(timeout=5.0)
+                if t.is_alive():
+                    logging.warning(f'action: wait client threads | result: timeout | thread: {t.name}')
         logging.info('action: wait client threads | result: success')
 
         self.program_normal_exit()
@@ -63,10 +74,28 @@ class Server:
         while not self.should_shutdown():
             try:
                 client_sock = self.__accept_new_connection()
-                self.client_threads.append(threading.Thread(target=self.__handle_client_connection, args=(client_sock,)))
-            except:
+                
+                self._cleanup_finished_threads()
+                
+                thread = threading.Thread(target=self.__handle_client_connection, args=(client_sock,))
+                thread.daemon = True
+                
+                with self.threads_lock:
+                    self.client_threads.append(thread)
+                
+                thread.start()
+                
+            except Exception as e:
                 if self.should_shutdown():
                     break
+                logging.error(f'action: accept_connection | result: fail | error: {e}')
+
+    def _cleanup_finished_threads(self):
+        """
+        Remove finished threads from the thread list to prevent memory leaks.
+        """
+        with self.threads_lock:
+            self.client_threads = [t for t in self.client_threads if t.is_alive()]
 
     def __handle_client_connection(self, client_sock):
         """
@@ -82,7 +111,8 @@ class Server:
         
         logging.info(f'action: handle_client_connection | result: in_progress | client: {addr_str}')
         
-        if client_sock: self.client_sockets.append(client_sock)
+        with self.threads_lock:
+            if client_sock: self.client_sockets.append(client_sock)
         try:
             message_type, data = self.__receive_message(client_sock)
             
@@ -105,8 +135,9 @@ class Server:
                 logging.debug(f'action: close_client_connection | result: success | client: {addr_str}')
             except:
                 logging.debug(f'action: close_client_connection | result: fail | client: {addr_str}')
-            if client_sock in self.client_sockets: 
-                self.client_sockets.remove(client_sock)
+            
+            with self.threads_lock:
+                if client_sock in self.client_sockets: self.client_sockets.remove(client_sock)
 
     def __receive_message(self, client_sock):
         """
