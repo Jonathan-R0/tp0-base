@@ -1,8 +1,12 @@
 package common
 
 import (
+	"bufio"
+	"encoding/binary"
+	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/op/go-logging"
@@ -76,6 +80,16 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v | total_bets_processed: %d", c.config.ID, len(c.bets))
+	
+	if err := c.NotifyFinished(); err != nil {
+		log.Errorf("action: notify_finished | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	
+	if err := c.QueryWinners(); err != nil {
+		log.Errorf("action: query_winners | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
 }
 
 // CheckShutdown checks if shutdown was requested
@@ -111,4 +125,100 @@ func (c *Client) WaitBetweenBatches(currentIndex, totalBatches int) {
 	if currentIndex < totalBatches-1 {
 		time.Sleep(c.config.LoopPeriod)
 	}
+}
+
+// NotifyFinished notifies the server that this agency has finished sending all bets
+func (c *Client) NotifyFinished() error {
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
+	defer c.conn.Close()
+	
+	message := fmt.Sprintf("FINISHED|%s\n", c.config.ID)
+	messageBytes := []byte(message)
+	
+	// Send size header
+	sizeBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
+	
+	if err := WriteAllBytes(c.conn, sizeBuffer); err != nil {
+		return fmt.Errorf("failed to send size header: %v", err)
+	}
+	
+	if err := WriteAllBytes(c.conn, messageBytes); err != nil {
+		return fmt.Errorf("failed to send finished message: %v", err)
+	}
+	
+	// Wait for acknowledgment
+	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read finished acknowledgment: %v", err)
+	}
+	
+	if strings.TrimSpace(response) == "ACK" {
+		log.Infof("action: notify_finished | result: success | client_id: %v", c.config.ID)
+		return nil
+	}
+	
+	return fmt.Errorf("unexpected response to finished notification: %s", response)
+}
+
+// QueryWinners queries the server for winners from this agency
+func (c *Client) QueryWinners() error {
+	if err := c.createClientSocket(); err != nil {
+		return err
+	}
+	defer c.conn.Close()
+	
+	message := fmt.Sprintf("QUERY_WINNERS|%s\n", c.config.ID)
+	messageBytes := []byte(message)
+	
+	// Send size header
+	sizeBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
+	
+	if err := WriteAllBytes(c.conn, sizeBuffer); err != nil {
+		return fmt.Errorf("failed to send size header: %v", err)
+	}
+	
+	if err := WriteAllBytes(c.conn, messageBytes); err != nil {
+		return fmt.Errorf("failed to send winners query: %v", err)
+	}
+	
+	// Read winners response
+	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read winners response: %v", err)
+	}
+	
+	response = strings.TrimSpace(response)
+	if strings.HasPrefix(response, "WINNERS|") {
+		parts := strings.Split(response, "|")
+		if len(parts) >= 2 {
+			winnersCount := len(parts) - 1 // Subtract 1 for "WINNERS" prefix
+			log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnersCount)
+			return nil
+		}
+	} else if strings.HasPrefix(response, "ERROR|") {
+		parts := strings.Split(response, "|")
+		if len(parts) >= 2 {
+			errorMessage := strings.Join(parts[1:], "|")
+			return fmt.Errorf("server_error: %s", errorMessage)
+		}
+	}
+	
+	return fmt.Errorf("unexpected_format: %s", response)
+}
+
+// WriteAllBytes writes all bytes to the connection, handling partial writes
+func WriteAllBytes(conn net.Conn, data []byte) error {
+	totalWritten := 0
+	for totalWritten < len(data) {
+		n, err := conn.Write(data[totalWritten:])
+		if err != nil {
+			return fmt.Errorf("failed to write data: %v", err)
+		}
+		totalWritten += n
+	}
+	return nil
 }

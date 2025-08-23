@@ -115,13 +115,13 @@ func (batch *BetBatch) SendBatchToServer(conn net.Conn) error {
 	log.Debugf("action: send_batch | result: in_progress | bets_count: %d | sending_size_header: %d bytes", 
 		len(batch.Bets), len(messageBytes))
 
-	if err := batch.WriteAllBytes(conn, sizeBuffer); err != nil {
+	if err := WriteAllBytes(conn, sizeBuffer); err != nil {
 		log.Errorf("action: send_batch | result: fail | bets_count: %d | error: failed to send size header: %v", 
 			len(batch.Bets), err)
 		return err
 	}
 
-	if err := batch.WriteAllBytes(conn, messageBytes); err != nil {
+	if err := WriteAllBytes(conn, messageBytes); err != nil {
 		log.Errorf("action: send_batch | result: fail | bets_count: %d | error: failed to send message: %v", 
 			len(batch.Bets), err)
 		return err
@@ -169,27 +169,5 @@ func (batch *BetBatch) ReceiveBatchResponse(conn net.Conn) error {
 		return fmt.Errorf("batch processing failed")
 	}
 	
-	return nil
-}
-
-func (batch *BetBatch) WriteAllBytes(conn net.Conn, data []byte) error {
-	log.Debugf("action: write_batch_bytes | result: in_progress | bets_count: %d | total_bytes: %d", 
-		len(batch.Bets), len(data))
-	
-	totalWritten := 0
-	for totalWritten < len(data) {
-		n, err := conn.Write(data[totalWritten:])
-		if err != nil {
-			log.Errorf("action: write_batch_bytes | result: fail | bets_count: %d | error: %v", 
-				len(batch.Bets), err)
-			return err
-		}
-		totalWritten += n
-		log.Debugf("action: write_batch_bytes | result: in_progress | bets_count: %d | written: %d/%d bytes", 
-			len(batch.Bets), totalWritten, len(data))
-	}
-	
-	log.Debugf("action: write_batch_bytes | result: success | bets_count: %d | total_written: %d bytes", 
-		len(batch.Bets), totalWritten)
 	return nil
 }

@@ -1,8 +1,9 @@
 import socket
 import logging
 import signal
+import threading
 
-from common.utils import ack_batch_client, receive_bet_batch, store_bets
+from common.utils import ack_batch_client, receive_bet_batch_from_message, store_bets, handle_finished_notification, handle_winners_query
 
 
 class Server:
@@ -12,6 +13,12 @@ class Server:
         signal.signal(signal.SIGINT, self._signal_handler)
         self.program_normal_exit = program_normal_exit
         self.client_sockets = []
+        
+        # Lottery variables
+        self.finished_agencies = set()
+        self.lottery_completed = False
+        self.lottery_lock = threading.Lock()
+        
         # Initialize server socket
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
@@ -41,11 +48,9 @@ class Server:
 
     def run(self):
         """
-        Dummy Server loop
-
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
+        Server loop that accepts new connections and establishes
+        communication with clients. After client communication
+        finishes, server starts to accept new connections again
         """
 
         while not self.should_shutdown():
@@ -58,10 +63,9 @@ class Server:
 
     def __handle_client_connection(self, client_sock):
         """
-        Read batch of bets from a specific client socket and closes the socket
-
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
+        Read message from a specific client socket and handle it accordingly.
+        The message can be either a batch of bets, a finished notification,
+        or a winners query.
         """
         try:
             client_addr = client_sock.getpeername()
@@ -73,11 +77,18 @@ class Server:
         
         if client_sock: self.client_sockets.append(client_sock)
         try:
-            bets = receive_bet_batch(client_sock)
-            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
-            store_bets(bets)
-            ack_batch_client(client_sock, bets, True)
-            logging.info(f'action: handle_client_connection | result: success | client: {addr_str} | cantidad: {len(bets)}')
+            message_type, data = self.__receive_message(client_sock)
+            
+            if message_type == "BATCH":
+                self.__handle_batch_message(client_sock, data, addr_str)
+            elif message_type == "FINISHED":
+                self.__handle_finished_message(client_sock, data, addr_str)
+            elif message_type == "QUERY_WINNERS":
+                self.__handle_winners_query(client_sock, data, addr_str)
+            else:
+                logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Unknown message type: {message_type}')
+                ack_batch_client(client_sock, [], False)
+                
         except Exception as e:
             logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
             ack_batch_client(client_sock, [], False)
@@ -89,6 +100,95 @@ class Server:
                 logging.debug(f'action: close_client_connection | result: fail | client: {addr_str}')
             if client_sock in self.client_sockets: 
                 self.client_sockets.remove(client_sock)
+
+    def __receive_message(self, client_sock):
+        """
+        Receive and parse the message from client to determine its type.
+        Returns (message_type, data) tuple.
+        """
+        size_bytes = client_sock.recv(2)
+        if len(size_bytes) != 2:
+            raise ConnectionError("Failed to read message size")
+        
+        size = int.from_bytes(size_bytes, byteorder='big')
+        
+        data = b""
+        while len(data) < size:
+            remaining = size - len(data)
+            packet = client_sock.recv(remaining)
+            if not packet:
+                raise ConnectionError("Connection closed before reading all data")
+            data += packet
+        
+        message = data.decode('utf-8').strip()
+        
+        # Parse message type
+        if message.startswith("FINISHED|"):
+            return "FINISHED", message
+        elif message.startswith("QUERY_WINNERS|"):
+            return "QUERY_WINNERS", message
+        else:
+            return "BATCH", message
+
+    def __handle_batch_message(self, client_sock, message, addr_str):
+        """Handle a batch of bets from a client."""
+        try:
+            bets = receive_bet_batch_from_message(message)
+            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
+            store_bets(bets)
+            ack_batch_client(client_sock, bets, True)
+            logging.info(f'action: handle_client_connection | result: success | client: {addr_str} | cantidad: {len(bets)}')
+        except Exception as e:
+            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
+            ack_batch_client(client_sock, [], False)
+
+    def __handle_finished_message(self, client_sock, message, addr_str):
+        """Handle a finished notification from a client."""
+        try:
+            agency_id = handle_finished_notification(client_sock, message)
+            with self.lottery_lock:
+                self.finished_agencies.add(agency_id)
+                logging.info(f'action: agency_finished | result: success | agency: {agency_id} | finished_count: {len(self.finished_agencies)}')
+                
+                # Check if all 5 agencies have finished
+                if len(self.finished_agencies) == 5 and not self.lottery_completed:
+                    self.lottery_completed = True
+                    logging.info('action: sorteo | result: success')
+                    
+        except Exception as e:
+            logging.error(f'action: handle_finished_message | result: fail | client: {addr_str} | error: {e}')
+            # Send error response for non-batch messages
+            try:
+                response = f"ERROR|{str(e)}\n"
+                client_sock.send(response.encode('utf-8'))
+            except:
+                pass
+
+    def __handle_winners_query(self, client_sock, message, addr_str):
+        """Handle a winners query from a client."""
+        try:
+            if not self.lottery_completed:
+                # Send error response for non-batch messages
+                try:
+                    response = f"ERROR|Lottery not yet completed\n"
+                    client_sock.send(response.encode('utf-8'))
+                except:
+                    pass
+                return
+                
+            agency_id = handle_winners_query(client_sock, message)
+            logging.info(f'action: winners_query_handled | result: success | client: {addr_str} | agency: {agency_id}')
+            
+        except Exception as e:
+            logging.error(f'action: handle_winners_query | result: fail | client: {addr_str} | error: {e}')
+            # Send error response for non-batch messages
+            try:
+                response = f"ERROR|{str(e)}\n"
+                client_sock.send(response.encode('utf-8'))
+            except:
+                pass
+
+
 
     def __accept_new_connection(self):
         """

@@ -49,48 +49,89 @@ def load_bets() -> list[Bet]:
             yield Bet(row[0], row[1], row[2], row[3], row[4], row[5])
 
 """
-Receives a batch of bets from a client socket.
+Receives a batch of bets from a message string (for batch messages).
 """
-def receive_bet_batch(client_sock) -> list[Bet]:
-    addr_str = _get_client_address(client_sock)
-    logging.info(f'action: receive_bet_batch | result: in_progress | client: {addr_str}')
-    
-    message = _read_full_message(client_sock, addr_str)
-    bet_lines = _parse_batch_message(message, addr_str)
-    
-    bets = _process_bet_lines(bet_lines, addr_str)
-    
-    logging.info(f'action: receive_bet_batch | result: success | client: {addr_str} | bets_count: {len(bets)}')
+def receive_bet_batch_from_message(message: str) -> list[Bet]:
+    bet_lines = _parse_batch_message(message, "message")
+    bets = _process_bet_lines(bet_lines, "message")
     return bets
 
-def _get_client_address(client_sock) -> str:
-    """Get client address string for logging."""
+"""
+Handles a finished notification from a client.
+Returns the agency ID and sends acknowledgment.
+"""
+def handle_finished_notification(client_sock, message: str) -> str:
     try:
         client_addr = client_sock.getpeername()
-        return f"{client_addr[0]}:{client_addr[1]}"
+        addr_str = f"{client_addr[0]}:{client_addr[1]}"
     except:
-        return "unknown"
+        addr_str = "unknown"
+    
+    logging.info(f'action: handle_finished_notification | result: in_progress | client: {addr_str}')
+    
+    # Parse agency ID from message
+    parts = message.split('|')
+    if len(parts) != 2:
+        raise ValueError(f"Invalid finished message format: {message}")
+    
+    agency_id = parts[1].strip()
+    logging.debug(f'action: handle_finished_notification | result: in_progress | client: {addr_str} | agency: {agency_id}')
+    
+    # Send acknowledgment
+    response = "ACK\n"
+    try:
+        bytes_sent = client_sock.send(response.encode('utf-8'))
+        logging.debug(f'action: handle_finished_notification | result: in_progress | client: {addr_str} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
+        logging.info(f'action: handle_finished_notification | result: success | client: {addr_str} | agency: {agency_id}')
+        return agency_id
+    except Exception as e:
+        logging.error(f'action: handle_finished_notification | result: fail | client: {addr_str} | agency: {agency_id} | error: {e}')
+        raise
 
-def _read_full_message(client_sock, addr_str: str) -> str:
-    """Read the complete message from client socket."""
-    size_bytes = client_sock.recv(2)
-    if len(size_bytes) != 2:
-        logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Failed to read message size')
-        raise ConnectionError("Failed to read message size")
+"""
+Handles a winners query from a client.
+Returns the agency ID and sends winners list.
+"""
+def handle_winners_query(client_sock, message: str) -> str:
+    try:
+        client_addr = client_sock.getpeername()
+        addr_str = f"{client_addr[0]}:{client_addr[1]}"
+    except:
+        addr_str = "unknown"
     
-    size = int.from_bytes(size_bytes, byteorder='big')
-    logging.debug(f'action: receive_bet_batch | result: in_progress | client: {addr_str} | message_size: {size} bytes')
+    logging.info(f'action: handle_winners_query | result: in_progress | client: {addr_str}')
     
-    data = b""
-    while len(data) < size:
-        remaining = size - len(data)
-        packet = client_sock.recv(remaining)
-        if not packet:
-            logging.error(f'action: receive_bet_batch | result: fail | client: {addr_str} | error: Connection closed unexpectedly')
-            raise ConnectionError("Connection closed before reading all data")
-        data += packet
+    # Parse agency ID from message
+    parts = message.split('|')
+    if len(parts) != 2:
+        raise ValueError(f"Invalid winners query format: {message}")
     
-    return data.decode('utf-8').strip()
+    agency_id = parts[1].strip()
+    logging.debug(f'action: handle_winners_query | result: in_progress | client: {addr_str} | agency: {agency_id}')
+    
+    # Load all bets and find winners for this agency
+    all_bets = list(load_bets())
+    agency_bets = [bet for bet in all_bets if str(bet.agency) == agency_id]
+    
+    winners = []
+    for bet in agency_bets:
+        if has_won(bet):
+            winners.append(bet.document)
+    
+    # Send winners response
+    if winners:
+        response = f"WINNERS|{'|'.join(map(str, winners))}\n"
+    else:
+        response = "WINNERS|\n"  # No winners
+    
+    try:
+        bytes_sent = client_sock.send(response.encode('utf-8'))
+        logging.debug(f'action: handle_winners_query | result: in_progress | client: {addr_str} | agency: {agency_id} | winners_count: {len(winners)} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
+        logging.info(f'action: handle_winners_query | result: success | client: {addr_str} | agency: {agency_id} | winners_count: {len(winners)}')
+        return agency_id
+    except Exception as e:
+        logging.error(f'action: handle_winners_query | result: fail | client: {addr_str} | agency: {agency_id} | error: {e}')
+        raise
 
 def _parse_batch_message(message: str, addr_str: str) -> list[str]:
     """Parse batch message and return batch count and bet lines."""
