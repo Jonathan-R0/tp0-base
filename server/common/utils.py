@@ -116,8 +116,26 @@ def ack_client(client_sock, bet) -> None:
     logging.debug(f'action: ack_client | result: in_progress | client: {addr_str} | response_size: {len(response.encode("utf-8"))} bytes')
     
     try:
-        bytes_sent = client_sock.send(response.encode('utf-8'))
+        bytes_sent = send_all_bytes(client_sock, response)
         logging.debug(f'action: ack_client | result: in_progress | client: {addr_str} | bytes_sent: {bytes_sent}/{len(response.encode("utf-8"))}')
         logging.info(f'action: ack_client | result: success | client: {addr_str} | dni: {bet.document} | number: {bet.number}')
     except Exception as e:
         logging.error(f'action: ack_client | result: fail | client: {addr_str} | dni: {bet.document} | number: {bet.number} | error: {e}')
+
+def send_all_bytes(sock, data):
+    """
+    Send all bytes through the socket, handling short sends.
+    """
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    
+    total_sent = 0
+    while total_sent < len(data):
+        try:
+            sent = sock.send(data[total_sent:])
+            if sent == 0:
+                raise ConnectionError("Socket connection broke")
+            total_sent += sent
+        except Exception as e:
+            raise ConnectionError(f"Failed to send data: {e}")
+    return total_sent
