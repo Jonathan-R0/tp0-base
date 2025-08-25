@@ -72,18 +72,35 @@ func ReadBetsFromCSV(filename string, agencyID string) ([]Bet, error) {
 }
 
 func CreateBatches(bets []Bet, maxBatchSize int) []*BetBatch {
+	const maxBytesPerBatch = 1024 * 8
 	var batches []*BetBatch
-	
-	for i := 0; i < len(bets); i += maxBatchSize {
-		end := i + maxBatchSize
-		if end > len(bets) {
-			end = len(bets)
+	var currentBatch []Bet
+	currentBatchBytes := 0
+
+	for _, bet := range bets {
+		betLine := fmt.Sprintf("%s|%s|%s|%d|%s|%d\n", bet.Agency, bet.Name, bet.Lastname, bet.Document, bet.Birthdate, bet.Number)
+		betSize := len(betLine)
+
+		if len(currentBatch) > 0 && (currentBatchBytes + betSize > maxBytesPerBatch) {
+			batches = append(batches, NewBetBatch(currentBatch))
+			currentBatch = nil
+			currentBatchBytes = 0
 		}
-		
-		batch := NewBetBatch(bets[i:end])
-		batches = append(batches, batch)
+
+		currentBatch = append(currentBatch, bet)
+		currentBatchBytes += betSize
+
+		if maxBatchSize > 0 && len(currentBatch) >= maxBatchSize {
+			batches = append(batches, NewBetBatch(currentBatch))
+			currentBatch = nil
+			currentBatchBytes = 0
+		}
 	}
-	
+
+	if len(currentBatch) > 0 {
+		batches = append(batches, NewBetBatch(currentBatch))
+	}
+
 	return batches
 }
 
