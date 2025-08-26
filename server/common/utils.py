@@ -192,7 +192,7 @@ def ack_batch_client(client_sock, bets: list[Bet], success: bool) -> None:
     except Exception as e:
         logging.error(f'action: ack_batch_client | result: fail | client: {addr_str} | status: {status} | bets_count: {quantity} | error: {e}')
 
-def send_all_bytes(sock, data):
+def send_all_bytes(sock, data) -> int:
     """
     Send all bytes through the socket, handling short sends.
     """
@@ -209,3 +209,23 @@ def send_all_bytes(sock, data):
         except Exception as e:
             raise ConnectionError(f"Failed to send data: {e}")
     return total_sent
+
+def recv_from_server(sock) -> str:
+    """
+    Receive as many bytes as sent by the server according to the protocol.
+    """
+    size_bytes = sock.recv(2)
+    if len(size_bytes) != 2:
+        raise ConnectionError("Failed to read message size")
+    
+    size = int.from_bytes(size_bytes, byteorder='big')
+    
+    data = b""
+    while len(data) < size:
+        remaining = size - len(data)
+        packet = sock.recv(remaining)
+        if not packet:
+            raise ConnectionError("Connection closed before reading all data")
+        data += packet
+    
+    return data.decode('utf-8').strip()

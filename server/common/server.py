@@ -3,7 +3,7 @@ import logging
 import signal
 import threading
 
-from common.utils import ack_batch_client, receive_bet_batch_from_message, send_all_bytes, store_bets, handle_finished_notification, handle_winners_query
+from common.utils import ack_batch_client, receive_bet_batch_from_message, recv_from_server, send_all_bytes, store_bets, handle_finished_notification, handle_winners_query
 
 class Server:
     def __init__(self, port, listen_backlog, expected_agencies, program_normal_exit):
@@ -27,14 +27,14 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
 
-    def _signal_handler(self, _signum, _frame):
+    def _signal_handler(self) -> None:
         self.shutdown_requested = True
         self.shutdown()
     
-    def should_shutdown(self):
+    def should_shutdown(self) -> bool:
         return self.shutdown_requested
     
-    def shutdown(self):
+    def shutdown(self) -> None:
         logging.info('action: shutdown | result: in_progress')
         if self._server_socket: self._server_socket.close()
         logging.info('action: shutdown | result: success')
@@ -63,7 +63,7 @@ class Server:
 
         self.program_normal_exit()
 
-    def run(self):
+    def run(self) -> None:
         """
         Server loop that accepts new connections and establishes
         communication with clients. After client communication
@@ -89,14 +89,14 @@ class Server:
                     break
                 logging.error(f'action: accept_connection | result: fail | error: {e}')
 
-    def _cleanup_finished_threads(self):
+    def _cleanup_finished_threads(self) -> None:
         """
         Remove finished threads from the thread list to prevent memory leaks.
         """
         with self.threads_lock:
             self.client_threads = [t for t in self.client_threads if t.is_alive()]
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self, client_sock) -> None:
         """
         Read message from a specific client socket and handle it accordingly.
         The message can be either a batch of bets, a finished notification,
@@ -138,26 +138,12 @@ class Server:
             with self.threads_lock:
                 if client_sock in self.client_sockets: self.client_sockets.remove(client_sock)
 
-    def __receive_message(self, client_sock):
+    def __receive_message(self, client_sock) -> tuple:
         """
         Receive and parse the message from client to determine its type.
         Returns (message_type, data) tuple.
         """
-        size_bytes = client_sock.recv(2)
-        if len(size_bytes) != 2:
-            raise ConnectionError("Failed to read message size")
-        
-        size = int.from_bytes(size_bytes, byteorder='big')
-        
-        data = b""
-        while len(data) < size:
-            remaining = size - len(data)
-            packet = client_sock.recv(remaining)
-            if not packet:
-                raise ConnectionError("Connection closed before reading all data")
-            data += packet
-        
-        message = data.decode('utf-8').strip()
+        message = recv_from_server(client_sock)
         
         # Parse message type
         if message.startswith("FINISHED|"):
@@ -167,7 +153,7 @@ class Server:
         else:
             return "BATCH", message
 
-    def __handle_batch_message(self, client_sock, message, addr_str):
+    def __handle_batch_message(self, client_sock, message, addr_str) -> None:
         """Handle a batch of bets from a client."""
         try:
             bets = receive_bet_batch_from_message(message)
@@ -179,7 +165,7 @@ class Server:
             logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
             ack_batch_client(client_sock, [], False)
 
-    def __handle_finished_message(self, client_sock, message, addr_str):
+    def __handle_finished_message(self, client_sock, message, addr_str) -> None:
         """Handle a finished notification from a client."""
         try:
             agency_id = handle_finished_notification(client_sock, message)
@@ -201,7 +187,7 @@ class Server:
             except Exception as send_error:
                 logging.error(f'action: send_error_response | result: fail | client: {addr_str} | error: {send_error}')
 
-    def __handle_winners_query(self, client_sock, message, addr_str):
+    def __handle_winners_query(self, client_sock, message, addr_str) -> None:
         """Handle a winners query from a client."""
         try:
             if not self.lottery_completed:
@@ -227,14 +213,13 @@ class Server:
 
 
 
-    def __accept_new_connection(self):
+    def __accept_new_connection(self) -> socket.socket:
         """
         Accept new connections
 
         Function blocks until a connection to a client is made.
         Then connection created is printed and returned
         """
-
         # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
