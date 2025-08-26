@@ -3,7 +3,7 @@ import logging
 import signal
 import threading
 
-from common.utils import ack_batch_client, receive_bet_batch_from_message, send_all_bytes, store_bets, handle_finished_notification, handle_winners_query
+from common.utils import ack_batch_client, receive_bet_batch_from_message, recv_from_server, send_all_bytes, store_bets, handle_finished_notification, handle_winners_query
 
 
 class Server:
@@ -107,21 +107,7 @@ class Server:
         Receive and parse the message from client to determine its type.
         Returns (message_type, data) tuple.
         """
-        size_bytes = client_sock.recv(2)
-        if len(size_bytes) != 2:
-            raise ConnectionError("Failed to read message size")
-        
-        size = int.from_bytes(size_bytes, byteorder='big')
-        
-        data = b""
-        while len(data) < size:
-            remaining = size - len(data)
-            packet = client_sock.recv(remaining)
-            if not packet:
-                raise ConnectionError("Connection closed before reading all data")
-            data += packet
-        
-        message = data.decode('utf-8').strip()
+        message = recv_from_server(client_sock)
         
         if message.startswith("FINISHED|"):
             return "FINISHED", message
