@@ -17,14 +17,14 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
 
-    def _signal_handler(self, _signum, _frame):
+    def _signal_handler(self) -> None:
         self.shutdown_requested = True
         self.shutdown()
     
-    def should_shutdown(self):
+    def should_shutdown(self) -> bool:
         return self.shutdown_requested
     
-    def shutdown(self):
+    def shutdown(self) -> None:
         logging.info('action: shutdown | result: in_progress')
         if self._server_socket: self._server_socket.close()
         logging.info('action: shutdown | result: success')
@@ -39,7 +39,7 @@ class Server:
 
         self.program_normal_exit()
 
-    def run(self):
+    def run(self) -> None:
         """
         Dummy Server loop
 
@@ -56,7 +56,7 @@ class Server:
                 if self.should_shutdown():
                     break
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self, client_sock) -> None:
         """
         Read message from a specific client socket and closes the socket
 
@@ -92,7 +92,7 @@ class Server:
             if client_sock in self.client_sockets: 
                 self.client_sockets.remove(client_sock)
 
-    def __accept_new_connection(self):
+    def __accept_new_connection(self) -> socket.socket:
         """
         Accept new connections
 

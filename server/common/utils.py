@@ -122,7 +122,7 @@ def ack_client(client_sock, bet) -> None:
     except Exception as e:
         logging.error(f'action: ack_client | result: fail | client: {addr_str} | dni: {bet.document} | number: {bet.number} | error: {e}')
 
-def send_all_bytes(sock, data):
+def send_all_bytes(sock, data) -> int:
     """
     Send all bytes through the socket, handling short sends.
     """
