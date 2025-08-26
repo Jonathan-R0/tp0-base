@@ -2,7 +2,6 @@ package common
 
 import (
 	"bufio"
-	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
@@ -221,36 +220,5 @@ func (c *Client) QueryWinnersWithRetry() error {
 		return err
 	}
 	
-	return nil
-}
-
-// SendMessageWithHeader sends a message with a 2-byte size header
-func SendMessageWithHeader(conn net.Conn, message string) error {
-	messageBytes := []byte(message)
-	
-	sizeBuffer := make([]byte, 2)
-	binary.BigEndian.PutUint16(sizeBuffer, uint16(len(messageBytes)))
-	
-	if err := WriteAllBytes(conn, sizeBuffer); err != nil {
-		return fmt.Errorf("failed to send size header: %v", err)
-	}
-	
-	if err := WriteAllBytes(conn, messageBytes); err != nil {
-		return fmt.Errorf("failed to send message: %v", err)
-	}
-	
-	return nil
-}
-
-// WriteAllBytes writes all bytes to the connection, handling partial writes
-func WriteAllBytes(conn net.Conn, data []byte) error {
-	totalWritten := 0
-	for totalWritten < len(data) {
-		n, err := conn.Write(data[totalWritten:])
-		if err != nil {
-			return fmt.Errorf("failed to write data: %v", err)
-		}
-		totalWritten += n
-	}
 	return nil
 }
