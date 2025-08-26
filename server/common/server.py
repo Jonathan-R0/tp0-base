@@ -25,14 +25,14 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
 
-    def _signal_handler(self, _signum, _frame):
+    def _signal_handler(self) -> None:
         self.shutdown_requested = True
         self.shutdown()
     
-    def should_shutdown(self):
+    def should_shutdown(self) -> bool:
         return self.shutdown_requested
     
-    def shutdown(self):
+    def shutdown(self) -> None:
         logging.info('action: shutdown | result: in_progress')
         if self._server_socket: self._server_socket.close()
         logging.info('action: shutdown | result: success')
@@ -47,7 +47,7 @@ class Server:
 
         self.program_normal_exit()
 
-    def run(self):
+    def run(self) -> None:
         """
         Server loop that accepts new connections and establishes
         communication with clients. After client communication
@@ -62,7 +62,7 @@ class Server:
                 if self.should_shutdown():
                     break
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self, client_sock) -> None:
         """
         Read message from a specific client socket and handle it accordingly.
         The message can be either a batch of bets, a finished notification,
@@ -102,7 +102,7 @@ class Server:
             if client_sock in self.client_sockets: 
                 self.client_sockets.remove(client_sock)
 
-    def __receive_message(self, client_sock):
+    def __receive_message(self, client_sock) -> tuple[str, str]:
         """
         Receive and parse the message from client to determine its type.
         Returns (message_type, data) tuple.
@@ -123,7 +123,6 @@ class Server:
         
         message = data.decode('utf-8').strip()
         
-        # Parse message type
         if message.startswith("FINISHED|"):
             return "FINISHED", message
         elif message.startswith("QUERY_WINNERS|"):
@@ -131,7 +130,7 @@ class Server:
         else:
             return "BATCH", message
 
-    def __handle_batch_message(self, client_sock, message, addr_str):
+    def __handle_batch_message(self, client_sock, message, addr_str) -> None:
         """Handle a batch of bets from a client."""
         try:
             bets = receive_bet_batch_from_message(message)
@@ -143,7 +142,7 @@ class Server:
             logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
             ack_batch_client(client_sock, [], False)
 
-    def __handle_finished_message(self, client_sock, message, addr_str):
+    def __handle_finished_message(self, client_sock, message, addr_str) -> None:
         """Handle a finished notification from a client."""
         try:
             agency_id = handle_finished_notification(client_sock, message)
@@ -158,18 +157,16 @@ class Server:
                     
         except Exception as e:
             logging.error(f'action: handle_finished_message | result: fail | client: {addr_str} | error: {e}')
-            # Send error response for non-batch messages
             try:
                 response = f"ERROR|{str(e)}\n"
                 send_all_bytes(client_sock, response)
             except:
                 pass
 
-    def __handle_winners_query(self, client_sock, message, addr_str):
+    def __handle_winners_query(self, client_sock, message, addr_str) -> None:
         """Handle a winners query from a client."""
         try:
             if not self.lottery_completed:
-                # Send error response for non-batch messages
                 try:
                     response = f"ERROR|Lottery not yet completed\n"
                     send_all_bytes(client_sock, response)
@@ -182,24 +179,19 @@ class Server:
             
         except Exception as e:
             logging.error(f'action: handle_winners_query | result: fail | client: {addr_str} | error: {e}')
-            # Send error response for non-batch messages
             try:
                 response = f"ERROR|{str(e)}\n"
                 send_all_bytes(client_sock, response)
             except:
                 pass
 
-
-
-    def __accept_new_connection(self):
+    def __accept_new_connection(self) -> socket.socket:
         """
         Accept new connections
 
         Function blocks until a connection to a client is made.
         Then connection created is printed and returned
         """
-
-        # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')

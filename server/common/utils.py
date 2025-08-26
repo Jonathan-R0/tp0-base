@@ -192,7 +192,7 @@ def ack_batch_client(client_sock, bets: list[Bet], success: bool) -> None:
     except Exception as e:
         logging.error(f'action: ack_batch_client | result: fail | client: {addr_str} | status: {status} | bets_count: {quantity} | error: {e}')
 
-def send_all_bytes(sock, data):
+def send_all_bytes(sock, data) -> int:
     """
     Send all bytes through the socket, handling short sends.
     """
