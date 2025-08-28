@@ -40,6 +40,18 @@ Cuando el cliente recibe la respuesta del servidor, verifica que todos los datos
 
 De fallar alguna parte del proceso, se loggea de forma detallada que evento causó el problema en cuestion.
 
+## Ejercicio 6
+
+El protocolo de enviado de bets en _batch_ es similar al del ejercicio 5, con la diferencia que en este caso se envían multiples apuestas por iteración de comunicación con el server. Los batches tienen un tamaño máximo configurable en el archivo `config.yaml` del cliente (parámetro `batch.maxAmount`) y tampoco pueden exceder los 8kb.
+
+Similar al envíado individual, previo al envio del batch se envía el tamaño total del mismo en 2 bytes big endian y luego se envían las apuestas concatenadas, cada una con el formato descripto en el ejercicio 5. El char `\n` sigue siendo el separador entre apuestas.
+
+```
+Agencia1|Nombre1|Apellido1|DNI1|FechaNacimiento1|Numero1\nAgencia2|Nombre2|Apellido2|DNI2|FechaNacimiento2|Numero2\n...AgenciaN|NombreN|ApellidoN|DNIN|FechaNacimientoN|NumeroN\n
+```
+
+En este caso, el servidor responde con un mensaje `SUCCESS|<APUESTAS PROCESADAS>\n` si todas las apuestas fueron procesadas correctamente, o `FAIL|<APUESTAS PROCESADAS>\n` en caso contrario.
+
 # Consigna
 
 En el presente repositorio se provee un esqueleto básico de cliente/servidor, en donde todas las dependencias del mismo se encuentran encapsuladas en containers. Los alumnos deberán resolver una guía de ejercicios incrementales, teniendo en cuenta las condiciones de entrega descritas al final de este enunciado.
