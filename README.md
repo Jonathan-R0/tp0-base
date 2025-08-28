@@ -13,6 +13,15 @@ En el ejercicio 1 decidí utilizar la librería PYYAML para escribir el archivo 
 
 Para instalar esta librería se debe ejecutar el comando: `pip install pyyaml`.
 
+## Ejercicio 3
+
+El shell script de este ejercicio funciona generando un string random el cual será envíado al server y devuelto:
+
+1. El string consiste de un valor fijo y un timestamp (dato aleatorio).
+2. Luego el mismo busca el puerto en el archivo de configuración del server (o `12345` si no lo encuentra).
+3. Se genera un contenedor basado en una imagen de `busybox` que será eliminada una vez termine la ejecución que se le asigna. Dentro de este nuevo contenedor, ejecutamos el programa (`nc server...`) que envía dentro de la red de nuestro contenedor un mensaje al server (puerto 12345) con el string generado previamente.
+4. Si el server devuelve el mismo string que se le envió, se mostrará en consola el mensaje de éxito.
+
 # Consigna
 
 En el presente repositorio se provee un esqueleto básico de cliente/servidor, en donde todas las dependencias del mismo se encuentran encapsuladas en containers. Los alumnos deberán resolver una guía de ejercicios incrementales, teniendo en cuenta las condiciones de entrega descritas al final de este enunciado.
