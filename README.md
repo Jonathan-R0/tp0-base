@@ -67,6 +67,19 @@ Es importante notar que el cliente reintentará esta consulta unas veces más po
 
 También denotamos que por cada tipo de mensaje que el cliente envía al servidor, se crea una conexión nueva. Esto se debe a que podría resultar conveniente que el servidor pueda atender múltiples mensajes de forma desacoplada, por si el cliente quisiera enviar consultas de forma no secuencial y con un orden ya predefinido.
 
+## Ejercicio 8
+
+Para manejar la concurrencia agrego en el server:
+
+- Una lista de los threads que atienden a los clientes.
+- Un lock para manejar el acceso a la lista de threads.
+
+Cuando recibo una conexión, creo un nuevo thread para atender a ese cliente y lo agrego a la lista de threads con el lockeo correspondiente.
+
+En cada ciclo de mi loop principal, ejecuto una llamada a mi recolector de threads basura, en la función `_cleanup_finished_threads`. Esta función itera sobre la lista de threads y elimina aquellos que ya terminaron su ejecución (chequeando con el método `is_alive()`).
+
+Al momento de cerrar el servidor, hago un join de todos los threads de mi lista de atendedores.
+
 # Consigna
 
 En el presente repositorio se provee un esqueleto básico de cliente/servidor, en donde todas las dependencias del mismo se encuentran encapsuladas en containers. Los alumnos deberán resolver una guía de ejercicios incrementales, teniendo en cuenta las condiciones de entrega descritas al final de este enunciado.
