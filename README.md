@@ -1,5 +1,20 @@
 # TP0: Docker + Comunicaciones + Concurrencia
 
+| Jonathan David Rosenblatt | 104105 |
+| ------------------------- | ------ |
+
+# Entrega
+
+Esta primera sección del readme corresponde a la entrega del trabajo práctico. La consigna como tal quedará en la sección siguiente.
+
+## Ejercicio 1
+
+En el ejercicio 1 decidí utilizar la librería PYYAML para escribir el archivo a partir de un objeto.
+
+Para instalar esta librería se debe ejecutar el comando: `pip install pyyaml`.
+
+# Consigna
+
 En el presente repositorio se provee un esqueleto básico de cliente/servidor, en donde todas las dependencias del mismo se encuentran encapsuladas en containers. Los alumnos deberán resolver una guía de ejercicios incrementales, teniendo en cuenta las condiciones de entrega descritas al final de este enunciado.
 
 El cliente (Golang) y el servidor (Python) fueron desarrollados en diferentes lenguajes simplemente para mostrar cómo dos lenguajes de programación pueden convivir en el mismo proyecto con la ayuda de containers, en este caso utilizando [Docker Compose](https://docs.docker.com/compose/).
