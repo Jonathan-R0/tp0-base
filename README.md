@@ -52,6 +52,21 @@ Agencia1|Nombre1|Apellido1|DNI1|FechaNacimiento1|Numero1\nAgencia2|Nombre2|Apell
 
 En este caso, el servidor responde con un mensaje `SUCCESS|<APUESTAS PROCESADAS>\n` si todas las apuestas fueron procesadas correctamente, o `FAIL|<APUESTAS PROCESADAS>\n` en caso contrario.
 
+## Ejercicio 7
+
+Para esta variación del protocolo, una vez el cliente envía todas las apuestas, se envía al server un mensaje `FINISHED|<AGENCIA>\n`, donde `<AGENCIA>` es el ID de la agencia que envió las apuestas. El servidor al recibir este mensaje, marca que la agencia en cuestión ha terminado de enviar apuestas. Siempre con el lockeo correspondiente para evitar condiciones de carrera. Si todas las agencias finalizaron de enviar apuestas, el servidor marca que la lotería ha finalizado en la variable `lottery_completed`. El servidor responde con `ACK\n` al cliente.
+
+Posteriormente ese envía un mensaje especial al servidor indicando que quiere consultar los ganadores: `QUERY_WINNERS|<AGENCIA>\n`. Luego el servidor procesa la solicitud, busca los ganadores correspondientes a la agencia que realiza la consulta y responde con un mensaje que contiene la lista de documentos ganadores, separados por el delimitador `|`. Si no hay ganadores, el servidor responde igualmente con el encabezado pero sin documentos. El flujo de esta consulta es el siguiente:
+
+- El cliente envía el mensaje `QUERY_WINNERS|<AGENCIA>\n`. Previo a esto se envía el largo del mensaje con dos bytes big endian.
+- El servidor responde con el mensaje `WINNERS|<DOC1>|<DOC2>|...|<DOCN>\n` (si hay ganadores) o `WINNERS|\n` (si no hay ganadores).
+- Si el proceso de lotería no ha concluido, el servidor responde con `ERROR|Lottery not yet completed\n`.
+- El cliente leerá la respuesta del servidor hasta encontrar el carácter de nueva línea `\n`, y luego procesará el mensaje recibido.
+
+Es importante notar que el cliente reintentará esta consulta unas veces más por si la lotería no ha concluido aún.
+
+También denotamos que por cada tipo de mensaje que el cliente envía al servidor, se crea una conexión nueva. Esto se debe a que podría resultar conveniente que el servidor pueda atender múltiples mensajes de forma desacoplada, por si el cliente quisiera enviar consultas de forma no secuencial y con un orden ya predefinido.
+
 # Consigna
 
 En el presente repositorio se provee un esqueleto básico de cliente/servidor, en donde todas las dependencias del mismo se encuentran encapsuladas en containers. Los alumnos deberán resolver una guía de ejercicios incrementales, teniendo en cuenta las condiciones de entrega descritas al final de este enunciado.
