@@ -5,7 +5,7 @@
 
 # Entrega
 
-Esta primera sección del readme corresponde a la entrega del trabajo práctico. La consigna como tal quedará en la sección siguiente.
+Esta primera sección del readme corresponde a la entrega del trabajo práctico. La [consigna](#consigna) como tal quedará en la sección siguiente. Se agregan además la sección de [Extras y Aclaraciones](#extras-y-aclaraciones) al final del readme.
 
 ## Ejercicio 1
 
@@ -79,6 +79,12 @@ Cuando recibo una conexión, creo un nuevo thread para atender a ese cliente y l
 En cada ciclo de mi loop principal, ejecuto una llamada a mi recolector de threads basura, en la función `_cleanup_finished_threads`. Esta función itera sobre la lista de threads y elimina aquellos que ya terminaron su ejecución (chequeando con el método `is_alive()`).
 
 Al momento de cerrar el servidor, hago un join de todos los threads de mi lista de atendedores.
+
+## Extras y Aclaraciones
+
+- Se agregó una gran cantidad de logs en el código, pues fue requerido para debuggear y hace más sencillo entender el flujo del sistema.
+- Existe una discrepancia entre el _casing_ del cliente y el servidor. El cliente utiliza `camelCase` y el servidor `snake_case`. Esto se debe a que el código nuevo que se fue agregando, copió el estilo de código ya existente.
+- La marca del tipo de retorno en las funciones del servidor están implementadas de la rama ej5 en adelante.
 
 # Consigna
 
