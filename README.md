@@ -75,12 +75,15 @@ Para manejar la concurrencia agrego en el server:
 
 - Una lista de los threads que atienden a los clientes.
 - Un lock para manejar el acceso a la lista de threads.
+- Un cambio en el protocolo de comunicación para que el cliente pueda notificar al servidor que ha terminado de enviar apuestas y que desea consultar los ganadores inmediatamente después usando el mismo socket.
 
 Cuando recibo una conexión, creo un nuevo thread para atender a ese cliente y lo agrego a la lista de threads con el lockeo correspondiente.
 
 En cada ciclo de mi loop principal, ejecuto una llamada a mi recolector de threads basura, en la función `_cleanup_finished_threads`. Esta función itera sobre la lista de threads y elimina aquellos que ya terminaron su ejecución (chequeando con el método `is_alive()`).
 
 Al momento de cerrar el servidor, hago un join de todos los threads de mi lista de atendedores.
+
+Además, para sincronizar la respuesta a la solicitud de ganadores, utilizo una variable de condición (`threading.Condition`). Cuando una agencia envía la notificación de que ha terminado de enviar apuestas, el servidor verifica si todas las agencias han finalizado. Si es así, notifica a todos los threads que están esperando la consulta de ganadores para que puedan proceder.
 
 ## Extras y Aclaraciones
 
