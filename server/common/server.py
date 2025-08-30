@@ -73,11 +73,11 @@ class Server:
 
         while not self.should_shutdown():
             try:
-                client_sock = self.__accept_new_connection()
+                client_sock = self._accept_new_connection()
                 
                 self._cleanup_finished_threads()
                 
-                thread = threading.Thread(target=self.__handle_client_connection, args=(client_sock,))
+                thread = threading.Thread(target=self._handle_client_connection, args=(client_sock,))
                 thread.daemon = True
                 
                 with self.threads_lock:
@@ -97,62 +97,87 @@ class Server:
         with self.threads_lock:
             self.client_threads = [t for t in self.client_threads if t.is_alive()]
 
-    def __handle_client_connection(self, client_sock) -> None:
+    def _handle_client_connection(self, client_sock) -> None:
         """
         Read message from a specific client socket and handle it accordingly.
         The message can be either a batch of bets, a finished notification,
         or a winners query.
         """
-        try:
-            client_addr = client_sock.getpeername()
-            addr_str = f"{client_addr[0]}:{client_addr[1]}"
-        except:
-            addr_str = "unknown"
-        
+        addr_str = self._get_client_address(client_sock)
         logging.info(f'action: handle_client_connection | result: in_progress | client: {addr_str}')
         
-        with self.threads_lock:
-            if client_sock: self.client_sockets.append(client_sock)
+        self._add_client_socket(client_sock)
+        
         try:
-            message_type, data = self.__receive_message(client_sock)
-            
-            if message_type == "BATCH":
-                self.__handle_batch_message(client_sock, data, addr_str)
-            elif message_type == "FINISHED":
-                self.__handle_finished_message(client_sock, data, addr_str)
-                
-                try:
-                    logging.info(f'action: waiting_for_winners_query | result: in_progress | client: {addr_str}')
-                    winner_message_type, winner_data = self.__receive_message(client_sock)
-                    
-                    if winner_message_type == "QUERY_WINNERS":
-                        self.__handle_winners_query(client_sock, winner_data, addr_str)
-                    else:
-                        logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Expected QUERY_WINNERS after FINISHED, got: {winner_message_type}')
-                        
-                except Exception as e:
-                    logging.error(f'action: handle_winners_query_after_finished | result: fail | client: {addr_str} | error: {e}')
-                    
-            elif message_type == "QUERY_WINNERS":
-                self.__handle_winners_query(client_sock, data, addr_str)
-            else:
-                logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Unknown message type: {message_type}')
-                ack_batch_client(client_sock, [], False)
-                
+            self._process_client_messages(client_sock, addr_str)
         except Exception as e:
             logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
             ack_batch_client(client_sock, [], False)
         finally:
-            try:
-                client_sock.close()
-                logging.debug(f'action: close_client_connection | result: success | client: {addr_str}')
-            except:
-                logging.debug(f'action: close_client_connection | result: fail | client: {addr_str}')
-            
-            with self.threads_lock:
-                if client_sock in self.client_sockets: self.client_sockets.remove(client_sock)
+            self._cleanup_client_connection(client_sock, addr_str)
 
-    def __receive_message(self, client_sock) -> tuple:
+    def _get_client_address(self, client_sock) -> str:
+        """Get client address string for logging."""
+        try:
+            client_addr = client_sock.getpeername()
+            return f"{client_addr[0]}:{client_addr[1]}"
+        except:
+            return "unknown"
+
+    def _add_client_socket(self, client_sock) -> None:
+        """Add client socket to the list of connections."""
+        with self.threads_lock:
+            if client_sock:
+                self.client_sockets.append(client_sock)
+
+    def _process_client_messages(self, client_sock, addr_str: str) -> None:
+        """Process messages from clients."""
+        message_type, data = self._receive_message(client_sock)
+        
+        if message_type == "BATCH":
+            self._handle_batch_message(client_sock, data, addr_str)
+        elif message_type == "FINISHED":
+            self._handle_finished_and_winners_flow(client_sock, data, addr_str)
+        elif message_type == "QUERY_WINNERS":
+            self._handle_winners_query(client_sock, data, addr_str)
+        else:
+            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Unknown message type: {message_type}')
+            ack_batch_client(client_sock, [], False)
+
+    def _handle_finished_and_winners_flow(self, client_sock, data: str, addr_str: str) -> None:
+        """Handle the two-message chain: FINISHED notification followed by QUERY_WINNERS."""
+        # Handle the FINISHED notification
+        self._handle_finished_message(client_sock, data, addr_str)
+        
+        # Wait for and handle the QUERY_WINNERS message on the same connection
+        self._wait_and_handle_winners_query(client_sock, addr_str)
+
+    def _wait_and_handle_winners_query(self, client_sock, addr_str: str) -> None:
+        """Wait for and handle the QUERY_WINNERS message after FINISHED."""
+        try:
+            logging.info(f'action: waiting_for_winners_query | result: in_progress | client: {addr_str}')
+            winner_message_type, winner_data = self._receive_message(client_sock)
+            
+            if winner_message_type == "QUERY_WINNERS":
+                self._handle_winners_query(client_sock, winner_data, addr_str)
+            else:
+                logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Expected QUERY_WINNERS after FINISHED, got: {winner_message_type}')
+        except Exception as e:
+            logging.error(f'action: handle_winners_query_after_finished | result: fail | client: {addr_str} | error: {e}')
+
+    def _cleanup_client_connection(self, client_sock, addr_str: str) -> None:
+        """Clean up client connection resources."""
+        try:
+            client_sock.close()
+            logging.debug(f'action: close_client_connection | result: success | client: {addr_str}')
+        except:
+            logging.debug(f'action: close_client_connection | result: fail | client: {addr_str}')
+        
+        with self.threads_lock:
+            if client_sock in self.client_sockets:
+                self.client_sockets.remove(client_sock)
+
+    def _receive_message(self, client_sock) -> tuple:
         """
         Receive and parse the message from client to determine its type.
         Returns (message_type, data) tuple.
@@ -167,7 +192,7 @@ class Server:
         else:
             return "BATCH", message
 
-    def __handle_batch_message(self, client_sock, message, addr_str) -> None:
+    def _handle_batch_message(self, client_sock, message, addr_str) -> None:
         """Handle a batch of bets from a client."""
         try:
             bets = receive_bet_batch_from_message(message)
@@ -179,7 +204,7 @@ class Server:
             logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: {e}')
             ack_batch_client(client_sock, [], False)
 
-    def __handle_finished_message(self, client_sock, message, addr_str) -> None:
+    def _handle_finished_message(self, client_sock, message, addr_str) -> None:
         """Handle a finished notification from a client."""
         try:
             agency_id = handle_finished_notification(client_sock, message)
@@ -202,7 +227,7 @@ class Server:
             except Exception as send_error:
                 logging.error(f'action: send_error_response | result: fail | client: {addr_str} | error: {send_error}')
 
-    def __handle_winners_query(self, client_sock, message, addr_str) -> None:
+    def _handle_winners_query(self, client_sock, message, addr_str) -> None:
         """Handle a winners query from a client."""
         try:
             with self.lottery_condition:
@@ -224,7 +249,7 @@ class Server:
 
 
 
-    def __accept_new_connection(self) -> socket.socket:
+    def _accept_new_connection(self) -> socket.socket:
         """
         Accept new connections
 
