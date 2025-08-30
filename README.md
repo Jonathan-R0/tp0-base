@@ -22,6 +22,8 @@ El shell script de este ejercicio funciona generando un string random el cual se
 3. Se genera un contenedor basado en una imagen de `busybox` que será eliminada una vez termine la ejecución que se le asigna. Dentro de este nuevo contenedor, ejecutamos el programa (`nc server...`) que envía dentro de la red de nuestro contenedor un mensaje al server (puerto 12345) con el string generado previamente.
 4. Si el server devuelve el mismo string que se le envió, se mostrará en consola el mensaje de éxito.
 
+Aclaro que el sistema que ejecute esta prueba debe tener una imagen de `busybox` descargada. En caso de no tenerla, se puede descargar con el comando `$ docker pull busybox`.
+
 ## Ejercicio 5
 
 Para comunicar al servidor y cliente se utiliza un socket tcp.
