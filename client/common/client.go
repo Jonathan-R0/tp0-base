@@ -93,12 +93,6 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 			log.Debugf("action: client_iteration | result: success | client_id: %v | iteration: %d/%d", 
 				c.config.ID, msgID, c.config.LoopAmount)
 		}
-		
-		if msgID < c.config.LoopAmount {
-			log.Debugf("action: wait_between_iterations | result: in_progress | client_id: %v | wait_time: %v", 
-				c.config.ID, c.config.LoopPeriod)
-			time.Sleep(c.config.LoopPeriod)
-		}
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
