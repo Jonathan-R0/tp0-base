@@ -65,7 +65,7 @@ Posteriormente ese envía un mensaje especial al servidor indicando que quiere c
 - Si el proceso de lotería no ha concluido, el servidor responde con `ERROR|Lottery not yet completed\n`.
 - El cliente leerá la respuesta del servidor hasta encontrar el carácter de nueva línea `\n`, y luego procesará el mensaje recibido.
 
-Es importante notar que el cliente reintentará esta consulta unas veces más por si la lotería no ha concluido aún.
+Es importante notar que el cliente reintentará esta consulta unas veces más por si la lotería no ha concluido aún. Entiendo que esto no es lo ideal dado que esto implica tener un mecanismo de esperas y reintentos. Puede suceder que el cliente consulte los ganadores antes de que todas las agencias hayan terminado de enviar sus apuestas. En ese caso, el servidor no podrá responder la consulta y el cliente deberá reintentar. Una solución superior, que es la que implementa el ejercicio 8, consiste de que el servidor tiene la conexión abierta y notifica al cliente cuando la lotería haya concluido. Para esto necesitamos un mecanismo de sincronización concurrente, por lo que quedará bien implementado en el próximo ejercicio.
 
 También denotamos que por cada tipo de mensaje que el cliente envía al servidor, se crea una conexión nueva. Esto se debe a que podría resultar conveniente que el servidor pueda atender múltiples mensajes de forma desacoplada, por si el cliente quisiera enviar consultas de forma no secuencial y con un orden ya predefinido.
 
