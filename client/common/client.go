@@ -74,19 +74,12 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 				c.config.ID, i+1, len(batches), err)
 			return
 		}
-		
-		c.WaitBetweenBatches(i, len(batches))
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v | total_bets_processed: %d", c.config.ID, len(c.bets))
 	
-	if err := c.NotifyFinished(); err != nil {
-		log.Errorf("action: notify_finished | result: fail | client_id: %v | error: %v", c.config.ID, err)
-		return
-	}
-	
-	if err := c.QueryWinnersWithRetry(); err != nil {
-		log.Errorf("action: query_winners | result: fail | client_id: %v | error: %v", c.config.ID, err)
+	if err := c.NotifyFinishedAndQueryWinners(); err != nil {
+		log.Errorf("action: notify_finished_and_query_winners | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		return
 	}
 }
@@ -119,15 +112,9 @@ func (c *Client) ProcessBatch(batch *BetBatch, batchNum, totalBatches int) error
 	return batch.ReceiveBatchResponse(c.conn)
 }
 
-// WaitBetweenBatches adds delay between batches if not the last one
-func (c *Client) WaitBetweenBatches(currentIndex, totalBatches int) {
-	if currentIndex < totalBatches-1 {
-		time.Sleep(c.config.LoopPeriod)
-	}
-}
-
-// NotifyFinished notifies the server that this agency has finished sending all bets
-func (c *Client) NotifyFinished() error {
+// NotifyFinishedAndQueryWinners notifies the server that this agency has finished sending all bets
+// and then queries for winners on the same connection
+func (c *Client) NotifyFinishedAndQueryWinners() error {
 	if err := c.createClientSocket(); err != nil {
 		return err
 	}
@@ -140,34 +127,26 @@ func (c *Client) NotifyFinished() error {
 	}
 	
 	// Wait for acknowledgment
-	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	reader := bufio.NewReader(c.conn)
+	response, err := reader.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read finished acknowledgment: %v", err)
 	}
 	
-	if strings.TrimSpace(response) == "ACK" {
-		log.Infof("action: notify_finished | result: success | client_id: %v", c.config.ID)
-		return nil
+	if strings.TrimSpace(response) != "ACK" {
+		return fmt.Errorf("unexpected response to finished notification: %s", response)
 	}
 	
-	return fmt.Errorf("unexpected response to finished notification: %s", response)
-}
-
-// QueryWinners queries the server for winners from this agency
-func (c *Client) QueryWinners() error {
-	if err := c.createClientSocket(); err != nil {
-		return err
-	}
-	defer c.conn.Close()
+	log.Infof("action: notify_finished | result: success | client_id: %v", c.config.ID)
 	
-	message := fmt.Sprintf("QUERY_WINNERS|%s\n", c.config.ID)
+	winnersMessage := fmt.Sprintf("QUERY_WINNERS|%s\n", c.config.ID)
 	
-	if err := SendMessageWithHeader(c.conn, message); err != nil {
-		return err
+	if err := SendMessageWithHeader(c.conn, winnersMessage); err != nil {
+		return fmt.Errorf("failed to send winners query: %v", err)
 	}
 	
 	// Read winners response
-	response, err := bufio.NewReader(c.conn).ReadString('\n')
+	response, err = reader.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read winners response: %v", err)
 	}
@@ -195,30 +174,3 @@ func (c *Client) QueryWinners() error {
 	return fmt.Errorf("unexpected_format: %s", response)
 }
 
-// QueryWinnersWithRetry queries the winners with retry logic for when lottery is not yet completed
-func (c *Client) QueryWinnersWithRetry() error {
-	maxRetries := 10
-	retryDelay := 500 * time.Millisecond
-	
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := c.QueryWinners()
-		if err == nil {
-			return nil
-		}
-		
-		if strings.Contains(err.Error(), "Lottery not yet completed") {
-			log.Infof("action: query_winners | result: in_progress | client_id: %v | attempt: %d | status: waiting_for_lottery_completion", c.config.ID, attempt)
-			if attempt < maxRetries {
-				time.Sleep(retryDelay)
-				continue
-			} else {
-				log.Infof("action: query_winners | result: timeout | client_id: %v | max_attempts: %d | reason: lottery_completion_timeout", c.config.ID, maxRetries)
-				return nil
-			}
-		}
-		
-		return err
-	}
-	
-	return nil
-}

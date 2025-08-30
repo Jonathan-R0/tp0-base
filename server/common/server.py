@@ -19,6 +19,7 @@ class Server:
         self.finished_agencies = set()
         self.lottery_completed = False
         self.lottery_lock = threading.Lock()
+        self.lottery_condition = threading.Condition(self.lottery_lock)  # Condition variable for lottery completion
         self.expected_agencies = expected_agencies
         
         # Initialize server socket
@@ -119,6 +120,19 @@ class Server:
                 self.__handle_batch_message(client_sock, data, addr_str)
             elif message_type == "FINISHED":
                 self.__handle_finished_message(client_sock, data, addr_str)
+                
+                try:
+                    logging.info(f'action: waiting_for_winners_query | result: in_progress | client: {addr_str}')
+                    winner_message_type, winner_data = self.__receive_message(client_sock)
+                    
+                    if winner_message_type == "QUERY_WINNERS":
+                        self.__handle_winners_query(client_sock, winner_data, addr_str)
+                    else:
+                        logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Expected QUERY_WINNERS after FINISHED, got: {winner_message_type}')
+                        
+                except Exception as e:
+                    logging.error(f'action: handle_winners_query_after_finished | result: fail | client: {addr_str} | error: {e}')
+                    
             elif message_type == "QUERY_WINNERS":
                 self.__handle_winners_query(client_sock, data, addr_str)
             else:
@@ -169,7 +183,7 @@ class Server:
         """Handle a finished notification from a client."""
         try:
             agency_id = handle_finished_notification(client_sock, message)
-            with self.lottery_lock:
+            with self.lottery_condition:
                 self.finished_agencies.add(agency_id)
                 logging.info(f'action: agency_finished | result: success | agency: {agency_id} | finished_count: {len(self.finished_agencies)} | checked: {self.finished_agencies}/{self.expected_agencies}')
                 
@@ -177,6 +191,7 @@ class Server:
                 if len(self.finished_agencies) == self.expected_agencies and not self.lottery_completed:
                     self.lottery_completed = True
                     logging.info('action: sorteo | result: success')
+                    self.lottery_condition.notify_all()
                     
         except Exception as e:
             logging.error(f'action: handle_finished_message | result: fail | client: {addr_str} | error: {e}')
@@ -190,14 +205,10 @@ class Server:
     def __handle_winners_query(self, client_sock, message, addr_str) -> None:
         """Handle a winners query from a client."""
         try:
-            if not self.lottery_completed:
-                # Send error response for non-batch messages
-                try:
-                    response = f"ERROR|Lottery not yet completed\n"
-                    send_all_bytes(client_sock, response)
-                except Exception as send_error:
-                    logging.error(f'action: send_error_response | result: fail | client: {addr_str} | error: {send_error}')
-                return
+            with self.lottery_condition:
+                while not self.lottery_completed:
+                    logging.info(f'action: waiting_for_lottery | result: in_progress | client: {addr_str} | status: lottery_not_completed')
+                    self.lottery_condition.wait()  # Wait until lottery completes
                 
             agency_id = handle_winners_query(client_sock, message)
             logging.info(f'action: winners_query_handled | result: success | client: {addr_str} | agency: {agency_id}')
