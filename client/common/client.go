@@ -71,8 +71,6 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 				c.config.ID, i+1, len(batches), err)
 			return
 		}
-		
-		c.WaitBetweenBatches(i, len(batches))
 	}
 
 	log.Infof("action: loop_finished | result: success | client_id: %v | total_bets_processed: %d", c.config.ID, len(c.bets))
@@ -104,11 +102,4 @@ func (c *Client) ProcessBatch(batch *BetBatch, batchNum, totalBatches int) error
 	}
 	
 	return batch.ReceiveBatchResponse(c.conn)
-}
-
-// WaitBetweenBatches adds delay between batches if not the last one
-func (c *Client) WaitBetweenBatches(currentIndex, totalBatches int) {
-	if currentIndex < totalBatches-1 {
-		time.Sleep(c.config.LoopPeriod)
-	}
 }
