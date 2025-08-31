@@ -92,6 +92,46 @@ Estas operaciones de espera y notificación, que usan la librería `threading`, 
 - Se agregó una gran cantidad de logs en el código, pues fue requerido para debuggear y hace más sencillo entender el flujo del sistema.
 - Existe una discrepancia entre el _casing_ del cliente y el servidor. El cliente utiliza `camelCase` y el servidor `snake_case`. Esto se debe a que el código nuevo que se fue agregando, copió el estilo de código ya existente.
 - La marca del tipo de retorno en las funciones del servidor están implementadas de la rama ej5 en adelante.
+- Se implementaron estas funciones para evitar los short reads y short writes:
+
+  - En el server al momento de recibir información con la función `recv_from_server`: Implementa un bucle que continúa leyendo hasta recibir todos los bytes esperados (primero lee 2 bytes para el tamaño del mensaje en el header, luego lee el mensaje completo):
+
+  ```python
+    while len(data) < size:
+        remaining = size - len(data)
+        packet = sock.recv(remaining)
+        data += packet
+  ```
+
+  - En el server al momento de enviar información al cliente `send_all_bytes`: Hace que todos los bytes sean enviados, reintentando automáticamente si `socket.send()` no envía todos los bytes:
+
+  ```python
+    while total_sent < len(data):
+        sent = socket.send(data[total_sent:])
+        total_sent += sent
+  ```
+
+  - En el cliente se maneja el envío con la función `WriteAllBytes`: aplica el mismo patrón que en el servidor para asegurar que todos los bytes sean enviados:
+
+  ```go
+    for totalWritten < len(data) {
+        n, err := conn.Write(data[totalWritten:])
+        if err != nil {
+            return fmt.Errorf("failed to write data: %v", err)
+        }
+        totalWritten += n
+    }
+  ```
+
+  - Y finalmente en el cliente se maneja la recepción utilizando la función `ReadString()`, que lee hasta encontrar el carácter de nueva línea `\n`, asegurando que se recibe el mensaje completo:
+
+  ```go
+    reader := bufio.NewReader(c.conn)
+    response, err := reader.ReadString('\n')
+    if err != nil {
+        return fmt.Errorf("failed to read finished acknowledgment: %v", err)
+    }
+  ```
 
 # Consigna
 
