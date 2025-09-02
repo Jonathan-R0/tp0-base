@@ -211,7 +211,7 @@ class Server:
             agency_id = handle_finished_notification(client_sock, message)
             with self.lottery_condition:
                 self.finished_agencies.add(agency_id)
-                logging.info(f'action: agency_finished | result: success | agency: {agency_id} | finished_count: {len(self.finished_agencies)} | checked: {self.finished_agencies}/{self.expected_agencies}')
+                logging.info(f'action: agency_finished | result: success | agency: {agency_id} | finished_count: {len(self.finished_agencies)} | checked: {len(self.finished_agencies)}/{self.expected_agencies}')
                 
                 # Check if all expected agencies have finished
                 if len(self.finished_agencies) == self.expected_agencies and not self.lottery_completed:
