@@ -16,6 +16,7 @@ class Server:
         self._server_socket.listen(listen_backlog)
 
     def _signal_handler(self, _signum, _frame):
+        logging.info(f'action: signal_handler | result: in_progress | signal: {_signum} | frame: {_frame}')
         self.shutdown_requested = True
         self.shutdown()
     
