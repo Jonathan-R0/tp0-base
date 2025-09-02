@@ -28,7 +28,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
 
-    def _signal_handler(self) -> None:
+    def _signal_handler(self, _signum, _frame) -> None:
         self.shutdown_requested = True
         self.shutdown()
     
