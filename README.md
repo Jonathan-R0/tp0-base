@@ -152,6 +152,8 @@ En el cliente decidí agregar las siguientes librerías:
 
 ## Correcciones
 
+Agrego todas las correcciones que realicé luego de la reunión con el docente. Todas las correcciones se hicieron sobre la rama `ej8` y posteriormente subiré estos cambios a mi rama `master`.
+
 - Evito crear una conexión nueva por cada batch de apuestas enviadas.
 - Agrego el uso de un lock en el servidor para proteger la escritura de las apuestas en el archivo.
 ```python
