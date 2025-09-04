@@ -50,8 +50,11 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
+	log.Infof("action: connect | result: success | client_id: %v | server_address: %v", 
+		c.config.ID, c.config.ServerAddress)
 	return nil
 }
 
@@ -59,6 +62,18 @@ func (c *Client) createClientSocket() error {
 func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 	log.Infof("action: start_client_loop | result: in_progress | client_id: %v | total_bets: %d | max_batch_size: %d", 
 		c.config.ID, len(c.bets), c.config.MaxBatchAmount)
+	
+	if err := c.createClientSocket(); err != nil {
+		log.Errorf("action: create_connection | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	defer func() {
+		if c.conn != nil {
+			c.conn.Close()
+			c.conn = nil
+			log.Infof("action: disconnect | result: success | client_id: %v", c.config.ID)
+		}
+	}()
 	
 	batches := CreateBatches(c.bets, c.config.MaxBatchAmount)
 	log.Infof("action: batches_created | result: success | client_id: %v | total_batches: %d", 
@@ -100,25 +115,24 @@ func (c *Client) CheckShutdown(sigChannel chan os.Signal) bool {
 
 // ProcessBatch handles the complete processing of a single batch
 func (c *Client) ProcessBatch(batch *BetBatch, batchNum, totalBatches int) error {
-	if err := c.createClientSocket(); err != nil {
-		return err
-	}
-	defer c.conn.Close()
-	
 	if err := batch.SendBatchToServer(c.conn); err != nil {
 		return err
 	}
 	
-	return batch.ReceiveBatchResponse(c.conn)
+	if err := batch.ReceiveBatchResponse(c.conn); err != nil {
+		return fmt.Errorf("failed to receive response for batch %d/%d: %v", batchNum, totalBatches, err)
+	}
+	
+	log.Infof("action: process_batch | result: success | client_id: %v | batch: %d/%d | bets_count: %d", 
+		c.config.ID, batchNum, totalBatches, len(batch.Bets))
+	
+	return nil
 }
 
 // NotifyFinishedAndQueryWinners notifies the server that this agency has finished sending all bets
 // and then queries for winners on the same connection
 func (c *Client) NotifyFinishedAndQueryWinners() error {
-	if err := c.createClientSocket(); err != nil {
-		return err
-	}
-	defer c.conn.Close()
+	log.Infof("action: notify_finished_and_query_winners | result: in_progress | client_id: %v", c.config.ID)
 	
 	message := fmt.Sprintf("FINISHED|%s\n", c.config.ID)
 	

@@ -133,17 +133,30 @@ class Server:
 
     def _process_client_messages(self, client_sock, addr_str: str) -> None:
         """Process messages from clients."""
-        message_type, data = self._receive_message(client_sock)
-        
-        if message_type == "BATCH":
-            self._handle_batch_message(client_sock, data, addr_str)
-        elif message_type == "FINISHED":
-            self._handle_finished_and_winners_flow(client_sock, data, addr_str)
-        elif message_type == "QUERY_WINNERS":
-            self._handle_winners_query(client_sock, data, addr_str)
-        else:
-            logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Unknown message type: {message_type}')
-            ack_batch_client(client_sock, [], False)
+        try:
+            while True:
+                message_type, data = self._receive_message(client_sock)
+                
+                if message_type == "BATCH":
+                    self._handle_batch_message(client_sock, data, addr_str)
+                elif message_type == "FINISHED":
+                    self._handle_finished_and_winners_flow(client_sock, data, addr_str)
+                    break
+                elif message_type == "QUERY_WINNERS":
+                    self._handle_winners_query(client_sock, data, addr_str)
+                else:
+                    logging.error(f'action: handle_client_connection | result: fail | client: {addr_str} | error: Unknown message type: {message_type}')
+                    ack_batch_client(client_sock, [], False)
+                    break
+        except Exception as e:
+            if "connection" in str(e).lower() or "closed" in str(e).lower():
+                logging.info(f'action: process_client_messages | result: connection_closed | client: {addr_str}')
+            else:
+                logging.error(f'action: process_client_messages | result: fail | client: {addr_str} | error: {e}')
+                try:
+                    ack_batch_client(client_sock, [], False)
+                except:
+                    pass
 
     def _handle_finished_and_winners_flow(self, client_sock, data: str, addr_str: str) -> None:
         """Handle the two-message chain: FINISHED notification followed by QUERY_WINNERS."""
@@ -183,15 +196,16 @@ class Server:
         Receive and parse the message from client to determine its type.
         Returns (message_type, data) tuple.
         """
-        message = recv_from_server(client_sock)
-        
-        # Parse message type
-        if message.startswith("FINISHED|"):
-            return "FINISHED", message
-        elif message.startswith("QUERY_WINNERS|"):
-            return "QUERY_WINNERS", message
-        else:
-            return "BATCH", message
+        try:
+            message = recv_from_server(client_sock)
+            if message.startswith("FINISHED|"):
+                return "FINISHED", message
+            elif message.startswith("QUERY_WINNERS|"):
+                return "QUERY_WINNERS", message
+            else:
+                return "BATCH", message
+        except Exception as e:
+            raise ConnectionError(f"Failed to receive message: {e}")
 
     def _handle_batch_message(self, client_sock, message, addr_str) -> None:
         """Handle a batch of bets from a client."""
