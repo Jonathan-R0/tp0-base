@@ -7,6 +7,8 @@
 
 Esta primera sección del readme corresponde a la entrega del trabajo práctico. La [consigna](#consigna) como tal quedará en la sección siguiente. Se agregan además la sección de [Extras y Aclaraciones](#extras-y-aclaraciones) al final del readme.
 
+Agrego también la sección de [Correcciones](#correcciones).
+
 ## Ejercicio 1
 
 En el ejercicio 1 decidí utilizar la librería PYYAML para escribir el archivo a partir de un objeto.
@@ -147,6 +149,15 @@ En el cliente decidí agregar las siguientes librerías:
 - `bufio`: Para manejar la lectura de datos desde el socket y leer hasta un `\n`.
 - `encoding/binary`: Para manejar la conversión de enteros a bytes en formato big endian. Se usa para enviar el tamaño del mensaje al servidor.
 - `encoding/csv`: Para leer los archivos CSV de apuestas.
+
+## Correcciones
+
+- Evito crear una conexión nueva por cada batch de apuestas enviadas.
+- Agrego el uso de un lock en el servidor para proteger la escritura de las apuestas en el archivo.
+```python
+    with self.storage_lock:
+        store_bets(bets)
+```
 
 # Consigna
 
