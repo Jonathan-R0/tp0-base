@@ -14,6 +14,7 @@ class Server:
         self.client_sockets = []
         self.client_threads = []
         self.threads_lock = threading.Lock()
+        self.storage_lock = threading.Lock()
         
         # Lottery variables
         self.finished_agencies = set()
@@ -212,7 +213,8 @@ class Server:
         try:
             bets = receive_bet_batch_from_message(message)
             logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
-            store_bets(bets)
+            with self.storage_lock:
+                store_bets(bets)
             ack_batch_client(client_sock, bets, True)
             logging.info(f'action: handle_client_connection | result: success | client: {addr_str} | cantidad: {len(bets)}')
         except Exception as e:
