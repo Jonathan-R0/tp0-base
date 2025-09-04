@@ -158,6 +158,17 @@ En el cliente decidí agregar las siguientes librerías:
     with self.storage_lock:
         store_bets(bets)
 ```
+- Evito hacer un `sock.recv(2)` pues puede suceder un short read. En su lugar, hago un bucle que continúa leyendo hasta recibir los 2 bytes esperados.
+```python
+    size_bytes = b""
+    while len(size_bytes) < 2:
+        packet = sock.recv(2 - len(size_bytes))
+        if not packet:
+            raise ConnectionError("Connection closed before reading message size")
+        size_bytes += packet
+    
+    size = int.from_bytes(size_bytes, byteorder='big')
+```
 
 # Consigna
 

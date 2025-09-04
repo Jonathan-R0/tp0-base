@@ -214,9 +214,12 @@ def recv_from_server(sock) -> str:
     """
     Receive as many bytes as sent by the server according to the protocol.
     """
-    size_bytes = sock.recv(2)
-    if len(size_bytes) != 2:
-        raise ConnectionError("Failed to read message size")
+    size_bytes = b""
+    while len(size_bytes) < 2:
+        packet = sock.recv(2 - len(size_bytes))
+        if not packet:
+            raise ConnectionError("Connection closed before reading message size")
+        size_bytes += packet
     
     size = int.from_bytes(size_bytes, byteorder='big')
     
