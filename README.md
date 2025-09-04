@@ -133,6 +133,21 @@ Estas operaciones de espera y notificación, que usan la librería `threading`, 
     }
   ```
 
+### Elección de Librerías
+
+Para el servidor en python decidí agregar las siguientes librerías:
+- `argparse`: Para manejar argumentos de línea de comandos en el script de generación de Docker Compose. También permite recibir los parámetros de forma necesaria y ordenada.
+- `yaml`: Para planchar un objeto hacia el archivo yaml de salida. Permite trabajar de forma programática y limpiar el contenido a serializar. Entiendo que así como existe esta ventaja también existe la desventaja de que la librería aumenta el peso y tiempo de procesamiento en comparación a lo que se puede conseguir escribiendo un string puro. A futuro entiendo que si necesito crear un software que vaya a ser distribuido o que pueda resultar ser una dependencia de otro software aparte, lo ideal es que este tenga la menor cantidad de dependencias posibles para evitar posibles puntos de fallos externos.
+- `threading`: Se utiliza para manejar la concurrencia en el servidor. Permite crear threads para atender múltiples clientes simultáneamente y manejar la sincronización entre ellos. Esta librería es parte de la biblioteca estándar de Python, por lo que no añade dependencias externas. A pesar de existir el GIL, su uso es adecuado para operaciones I/O como las que mayoritariamente realiza el servidor.
+- `signal`: Para manejar señales del sistema operativo, como SIGTERM, permitiendo que el servidor y cliente puedan cerrar de forma _graceful_. Esta librería también es parte de la biblioteca estándar de Python.
+
+En el cliente decidí agregar las siguientes librerías:
+- `strconv`: Para convertir strings a enteros. Utilizado para castear los datos entrantes por el archivo de configuración.
+- `os/signal` & `syscall`: Para manejar señales del sistema operativo, como SIGTERM, permitiendo que el cliente pueda cerrar de forma _graceful_.
+- `bufio`: Para manejar la lectura de datos desde el socket y leer hasta un `\n`.
+- `encoding/binary`: Para manejar la conversión de enteros a bytes en formato big endian. Se usa para enviar el tamaño del mensaje al servidor.
+- `encoding/csv`: Para leer los archivos CSV de apuestas.
+
 # Consigna
 
 En el presente repositorio se provee un esqueleto básico de cliente/servidor, en donde todas las dependencias del mismo se encuentran encapsuladas en containers. Los alumnos deberán resolver una guía de ejercicios incrementales, teniendo en cuenta las condiciones de entrega descritas al final de este enunciado.
