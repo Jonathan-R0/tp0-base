@@ -1,6 +1,7 @@
 import csv
 import datetime
 import logging
+from threading import Lock
 
 """ Bets storage location. """
 STORAGE_FILEPATH = "./bets.csv"
@@ -92,7 +93,7 @@ def handle_finished_notification(client_sock, message: str) -> str:
 Handles a winners query from a client.
 Returns the agency ID and sends winners list.
 """
-def handle_winners_query(client_sock, message: str) -> str:
+def handle_winners_query(client_sock, message: str, storage_lock: Lock) -> str:
     try:
         client_addr = client_sock.getpeername()
         addr_str = f"{client_addr[0]}:{client_addr[1]}"
@@ -110,8 +111,10 @@ def handle_winners_query(client_sock, message: str) -> str:
     logging.debug(f'action: handle_winners_query | result: in_progress | client: {addr_str} | agency: {agency_id}')
     
     # Load all bets and find winners for this agency
-    agency_bets = [bet for bet in load_bets() if str(bet.agency) == agency_id]
-    winners = [bet.document for bet in agency_bets if has_won(bet)]
+    with storage_lock:
+        agency_bets = [bet for bet in load_bets() if str(bet.agency) == agency_id]
+        winners = [bet.document for bet in agency_bets if has_won(bet)]
+    
     response = f"WINNERS|{'|'.join(map(str, winners))}\n" if winners else "WINNERS|\n"
     
     try:

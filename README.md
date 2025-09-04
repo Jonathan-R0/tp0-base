@@ -171,6 +171,12 @@ Agrego todas las correcciones que realicé luego de la reunión con el docente. 
     
     size = int.from_bytes(size_bytes, byteorder='big')
 ```
+- Agrego el uso de unl lock de protección de datos de apuestas, recientemente agregado para proteger la escritura de apueastas, al momento de leer las apuestas para buscar ganadores.
+```python
+    with storage_lock:
+        agency_bets = [bet for bet in load_bets() if str(bet.agency) == agency_id]
+        winners = [bet.document for bet in agency_bets if has_won(bet)]
+```
 
 # Consigna
 

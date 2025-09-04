@@ -252,7 +252,7 @@ class Server:
                     logging.info(f'action: waiting_for_lottery | result: in_progress | client: {addr_str} | status: lottery_not_completed')
                     self.lottery_condition.wait()  # Wait until lottery completes
                 
-            agency_id = handle_winners_query(client_sock, message)
+            agency_id = handle_winners_query(client_sock, message, self.storage_lock)
             logging.info(f'action: winners_query_handled | result: success | client: {addr_str} | agency: {agency_id}')
             
         except Exception as e:
