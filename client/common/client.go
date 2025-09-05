@@ -24,17 +24,17 @@ type ClientConfig struct {
 
 // Client Entity that encapsulates how
 type Client struct {
-	config ClientConfig
-	conn   net.Conn
-	bets   []Bet
+	config    ClientConfig
+	conn      net.Conn
+	csvFilename string
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig, bets []Bet) *Client {
+func NewClient(config ClientConfig, csvFilename string) *Client {
 	client := &Client{
-		config: config,
-		bets:   bets,
+		config:      config,
+		csvFilename: csvFilename,
 	}
 	return client
 }
@@ -60,8 +60,8 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send batches of bets to the server
 func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
-	log.Infof("action: start_client_loop | result: in_progress | client_id: %v | total_bets: %d | max_batch_size: %d", 
-		c.config.ID, len(c.bets), c.config.MaxBatchAmount)
+	log.Infof("action: start_client_loop | result: in_progress | client_id: %v | csv_filename: %s | max_batch_size: %d", 
+		c.config.ID, c.csvFilename, c.config.MaxBatchAmount)
 	
 	if err := c.createClientSocket(); err != nil {
 		log.Errorf("action: create_connection | result: fail | client_id: %v | error: %v", c.config.ID, err)
@@ -75,23 +75,44 @@ func (c *Client) StartClientLoop(sigChannel chan os.Signal) {
 		}
 	}()
 	
-	batches := CreateBatches(c.bets, c.config.MaxBatchAmount)
-	log.Infof("action: batches_created | result: success | client_id: %v | total_batches: %d", 
-		c.config.ID, len(batches))
+	batchReader, err := NewBatchReader(c.csvFilename, c.config.ID, c.config.MaxBatchAmount)
+	if err != nil {
+		log.Errorf("action: create_batch_reader | result: fail | client_id: %v | error: %v", c.config.ID, err)
+		return
+	}
+	defer batchReader.file.Close()
 	
-	for i, batch := range batches {
+	batchCount := 0
+	totalBetsProcessed := 0
+	
+	for {
 		if c.CheckShutdown(sigChannel) {
 			return
 		}
 		
-		if err := c.ProcessBatch(batch, i+1, len(batches)); err != nil {
-			log.Errorf("action: process_batch | result: fail | client_id: %v | batch: %d/%d | error: %v", 
-				c.config.ID, i+1, len(batches), err)
+		batch, err := batchReader.ReadNextBatch()
+		if err != nil {
+			log.Errorf("action: read_batch | result: fail | client_id: %v | batch: %d | error: %v", 
+				c.config.ID, batchCount+1, err)
+			return
+		}
+		
+		if batch == nil {
+			break
+		}
+		
+		batchCount++
+		totalBetsProcessed += len(batch.Bets)
+		
+		if err := c.ProcessBatch(batch, batchCount); err != nil {
+			log.Errorf("action: process_batch | result: fail | client_id: %v | batch: %d | error: %v", 
+				c.config.ID, batchCount, err)
 			return
 		}
 	}
 
-	log.Infof("action: loop_finished | result: success | client_id: %v | total_bets_processed: %d", c.config.ID, len(c.bets))
+	log.Infof("action: loop_finished | result: success | client_id: %v | total_batches: %d | total_bets_processed: %d", 
+		c.config.ID, batchCount, totalBetsProcessed)
 	
 	if err := c.NotifyFinishedAndQueryWinners(); err != nil {
 		log.Errorf("action: notify_finished_and_query_winners | result: fail | client_id: %v | error: %v", c.config.ID, err)
@@ -114,17 +135,14 @@ func (c *Client) CheckShutdown(sigChannel chan os.Signal) bool {
 }
 
 // ProcessBatch handles the complete processing of a single batch
-func (c *Client) ProcessBatch(batch *BetBatch, batchNum, totalBatches int) error {
+func (c *Client) ProcessBatch(batch *BetBatch, batchNum int) error {
 	if err := batch.SendBatchToServer(c.conn); err != nil {
 		return err
 	}
 	
 	if err := batch.ReceiveBatchResponse(c.conn); err != nil {
-		return fmt.Errorf("failed to receive response for batch %d/%d: %v", batchNum, totalBatches, err)
+		return err
 	}
-	
-	log.Infof("action: process_batch | result: success | client_id: %v | batch: %d/%d | bets_count: %d", 
-		c.config.ID, batchNum, totalBatches, len(batch.Bets))
 	
 	return nil
 }

@@ -28,85 +28,104 @@ func NewBetBatch(bets []Bet) *BetBatch {
 	return &BetBatch{Bets: bets}
 }
 
-func ReadBetsFromCSV(filename string, agencyID string) ([]Bet, error) {
+type BatchReader struct {
+	file        *os.File
+	csvReader   *csv.Reader
+	agencyID    string
+	maxBatchSize int
+	eof         bool
+	pendingBet  *Bet
+}
+
+func NewBatchReader(filename string, agencyID string, maxBatchSize int) (*BatchReader, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open CSV file: %v", err)
 	}
-	defer file.Close()
 
 	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read CSV file: %v", err)
-	}
-
-	var bets []Bet
-	for i, record := range records {
-		if len(record) != 5 {
-			return nil, fmt.Errorf("invalid record at line %d: expected 5 fields, got %d", i+1, len(record))
-		}
-
-		document, err := strconv.Atoi(strings.TrimSpace(record[2]))
-		if err != nil {
-			return nil, fmt.Errorf("invalid document at line %d: %v", i+1, err)
-		}
-
-		number, err := strconv.Atoi(strings.TrimSpace(record[4]))
-		if err != nil {
-			return nil, fmt.Errorf("invalid number at line %d: %v", i+1, err)
-		}
-
-		bet := Bet{
-			Agency:   agencyID,
-			Name:     strings.TrimSpace(record[0]),
-			Lastname: strings.TrimSpace(record[1]),
-			Document: document,
-			Birthdate: strings.TrimSpace(record[3]),
-			Number:   number,
-		}
-		bets = append(bets, bet)
-	}
-
-	return bets, nil
+	
+	return &BatchReader{
+		file:        file,
+		csvReader:   reader,
+		agencyID:    agencyID,
+		maxBatchSize: maxBatchSize,
+		eof:         false,
+		pendingBet:  nil,
+	}, nil
 }
 
-func CreateBatches(bets []Bet, maxBatchSize int) []*BetBatch {
+func (br *BatchReader) ReadNextBatch() (*BetBatch, error) {
+	if br.eof {
+		return nil, nil
+	}
+
 	const maxBytesPerBatch = 1024 * 8
-	var batches []*BetBatch
 	var currentBatch []Bet
 	currentBatchBytes := 0
 
-	for _, bet := range bets {
+	for {
+		var bet Bet
+		
+		if br.pendingBet != nil {
+			// Check if there is a pending bet to be sent
+			bet = *br.pendingBet
+			br.pendingBet = nil
+		} else {
+			record, err := br.csvReader.Read()
+			if err != nil {
+				if err.Error() == "EOF" {
+					br.eof = true
+					break
+				}
+				return nil, fmt.Errorf("failed to read CSV record: %v", err)
+			}
+
+			if len(record) != 5 {
+				return nil, fmt.Errorf("invalid record: expected 5 fields, got %d", len(record))
+			}
+
+			document, err := strconv.Atoi(strings.TrimSpace(record[2]))
+			if err != nil {
+				return nil, fmt.Errorf("invalid document: %v", err)
+			}
+
+			number, err := strconv.Atoi(strings.TrimSpace(record[4]))
+			if err != nil {
+				return nil, fmt.Errorf("invalid number: %v", err)
+			}
+
+			bet = Bet{
+				Agency:    br.agencyID,
+				Name:      strings.TrimSpace(record[0]),
+				Lastname:  strings.TrimSpace(record[1]),
+				Document:  document,
+				Birthdate: strings.TrimSpace(record[3]),
+				Number:    number,
+			}
+		}
+
 		betLine := fmt.Sprintf("%s|%s|%s|%d|%s|%d\n", bet.Agency, bet.Name, bet.Lastname, bet.Document, bet.Birthdate, bet.Number)
 		betSize := len(betLine)
 
 		if len(currentBatch) > 0 && (currentBatchBytes + betSize > maxBytesPerBatch) {
-			batches = append(batches, NewBetBatch(currentBatch))
-			currentBatch = nil
-			currentBatchBytes = 0
+			br.pendingBet = &bet
+			break
 		}
 
 		currentBatch = append(currentBatch, bet)
 		currentBatchBytes += betSize
 
-		if maxBatchSize > 0 && len(currentBatch) >= maxBatchSize {
-			batches = append(batches, NewBetBatch(currentBatch))
-			currentBatch = nil
-			currentBatchBytes = 0
+		if br.maxBatchSize > 0 && len(currentBatch) >= br.maxBatchSize {
+			break
 		}
 	}
 
-	if len(currentBatch) > 0 {
-		batches = append(batches, NewBetBatch(currentBatch))
+	if len(currentBatch) == 0 {
+		return nil, nil
 	}
 
-	return batches
-}
-
-func DoParseToNumber(s string) int {
-	number, _ := strconv.Atoi(strings.TrimSpace(s))
-	return number
+	return NewBetBatch(currentBatch), nil
 }
 
 func (batch *BetBatch) SendBatchToServer(conn net.Conn) error {

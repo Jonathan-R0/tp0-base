@@ -152,7 +152,7 @@ En el cliente decidí agregar las siguientes librerías:
 
 ## Correcciones
 
-Agrego todas las correcciones que realicé luego de la reunión con el docente. Todas las correcciones se hicieron sobre la rama `ej8` y posteriormente subiré estos cambios a mi rama `master`.
+Agrego todas las correcciones que realicé luego de la reunión con el docente. Todas las correcciones se hicieron sobre la rama `ej8` y posteriormente subiré estos cambios del README a mi rama `master`.
 
 - Evito crear una conexión nueva por cada batch de apuestas enviadas.
 - Agrego el uso de un lock en el servidor para proteger la escritura de las apuestas en el archivo.
@@ -177,6 +177,7 @@ Agrego todas las correcciones que realicé luego de la reunión con el docente. 
         agency_bets = [bet for bet in load_bets() if str(bet.agency) == agency_id]
         winners = [bet.document for bet in agency_bets if has_won(bet)]
 ```
+- Evito leer todas las apuestas en memoria implementando un loop de lecturas y enviados de batches de apuestas en el cliente.
 
 # Consigna
 

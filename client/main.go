@@ -139,14 +139,6 @@ func main() {
 
 	clientID := v.GetString("id")
 	csvFilename := fmt.Sprintf("/data/agency-%s.csv", clientID)
-	
-	bets, err := common.ReadBetsFromCSV(csvFilename, clientID)
-	if err != nil {
-		log.Criticalf("Failed to read CSV file: %v", err)
-	}
-
-	log.Infof("action: csv_loaded | result: success | client_id: %s | bets_count: %d | filename: %s", 
-		clientID, len(bets), csvFilename)
 
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
@@ -156,6 +148,6 @@ func main() {
 		MaxBatchAmount: v.GetInt("batch.maxAmount"),
 	}
 
-	client := common.NewClient(clientConfig, bets)
+	client := common.NewClient(clientConfig, csvFilename)
 	client.StartClientLoop(sigChannel)
 }
